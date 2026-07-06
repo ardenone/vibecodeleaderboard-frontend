@@ -1,0 +1,743 @@
+:root {
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #12121a;
+    --bg-tertiary: #1a1a24;
+    --text-primary: #e4e4e7;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --border-color: #27272a;
+    --accent-purple: #a78bfa;
+    --accent-blue: #60a5fa;
+    --accent-green: #4ade80;
+    --accent-yellow: #facc15;
+    --accent-red: #f87171;
+    --accent-orange: #fb923c;
+    --success: #22c55e;
+    --error: #ef4444;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    min-height: 100vh;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+/* Header */
+header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+header h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+}
+
+.tagline {
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+}
+
+/* Search Section */
+.search-section {
+    margin-bottom: 2rem;
+}
+
+.search-box {
+    display: flex;
+    gap: 0.5rem;
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.search-box input {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 1rem;
+}
+
+.search-box input:focus {
+    outline: none;
+    border-color: var(--accent-purple);
+}
+
+.search-box button {
+    padding: 0.75rem 1.25rem;
+    background: var(--accent-purple);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.search-box button:hover {
+    background: #9274e8;
+}
+
+.search-result {
+    max-width: 500px;
+    margin: 1rem auto 0;
+}
+
+/* Stats Bar */
+.stats-bar {
+    text-align: center;
+    color: var(--text-secondary);
+    margin-bottom: 2rem;
+    font-size: 0.95rem;
+}
+
+.stats-bar span {
+    margin: 0 0.5rem;
+}
+
+/* Tool Filters */
+.tool-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-bottom: 2rem;
+}
+
+.tool-filter {
+    padding: 0.5rem 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: all 0.2s;
+}
+
+.tool-filter:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-purple);
+}
+
+.tool-filter.active {
+    background: var(--accent-purple);
+    border-color: var(--accent-purple);
+}
+
+.tool-icon {
+    font-size: 1rem;
+}
+
+/* Leaderboard Table */
+.leaderboard {
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border-color);
+}
+
+.leaderboard table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.leaderboard thead {
+    background: var(--bg-tertiary);
+}
+
+.leaderboard th {
+    padding: 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.leaderboard th.col-rank {
+    width: 60px;
+    text-align: center;
+}
+
+.leaderboard th.col-commits-30d,
+.leaderboard th.col-commits-total,
+.leaderboard th.col-repos {
+    width: 100px;
+    text-align: right;
+}
+
+.leaderboard tbody tr {
+    border-top: 1px solid var(--border-color);
+    transition: background 0.15s;
+}
+
+.leaderboard tbody tr:hover {
+    background: var(--bg-tertiary);
+}
+
+.leaderboard td {
+    padding: 1rem;
+    vertical-align: middle;
+}
+
+.col-rank {
+    text-align: center;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.col-user {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.user-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+}
+
+.user-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.user-link:hover {
+    color: var(--accent-purple);
+}
+
+.col-tools {
+    width: 150px;
+}
+
+.tool-mix {
+    display: flex;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--bg-tertiary);
+}
+
+.tool-mix-segment {
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+.tool-mix-segment.claude { background: var(--accent-purple); }
+.tool-mix-segment.cursor { background: var(--accent-blue); }
+.tool-mix-segment.aider { background: var(--accent-green); }
+.tool-mix-segment.codex { background: var(--accent-yellow); }
+.tool-mix-segment.gemini { background: var(--accent-red); }
+.tool-mix-segment.opencode { background: var(--accent-orange); }
+
+.col-commits-30d,
+.col-commits-total,
+.col-repos {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-secondary);
+}
+
+.loading {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-muted);
+}
+
+.no-results {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-muted);
+}
+
+/* Load More */
+.load-more {
+    margin-top: 2rem;
+    text-align: center;
+}
+
+.btn-secondary {
+    padding: 0.75rem 2rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+    background: var(--bg-secondary);
+    border-color: var(--accent-purple);
+}
+
+/* User Result Card */
+.user-result-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-top: 1rem;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.user-result-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.user-result-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: var(--bg-secondary);
+}
+
+.user-result-info h3 {
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
+}
+
+.user-result-info .rank {
+    color: var(--accent-purple);
+    font-weight: 600;
+}
+
+.user-result-info .not-found {
+    color: var(--text-muted);
+}
+
+.user-result-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.stat-item {
+    text-align: center;
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+}
+
+.stat-value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.btn-generate-report {
+    width: 100%;
+    padding: 0.75rem;
+    background: var(--accent-purple);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 500;
+    transition: background 0.2s;
+}
+
+.btn-generate-report:hover {
+    background: #9274e8;
+}
+
+.btn-generate-report:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    padding: 1rem;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    background: var(--bg-secondary);
+    border-radius: 16px;
+    max-width: 600px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+    animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.modal-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 36px;
+    height: 36px;
+    background: var(--bg-tertiary);
+    border: none;
+    border-radius: 50%;
+    color: var(--text-secondary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.modal-close:hover {
+    background: var(--border-color);
+    color: var(--text-primary);
+}
+
+/* Report Content */
+.report-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem 2rem 1rem;
+}
+
+.report-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+}
+
+.report-title h2 {
+    font-size: 1.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.report-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: var(--accent-purple);
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.report-body {
+    padding: 1rem 2rem 2rem;
+}
+
+.report-section {
+    margin-bottom: 2rem;
+}
+
+.report-section h3 {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.tools-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.tool-bar-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.tool-name {
+    width: 100px;
+    font-weight: 500;
+}
+
+.tool-bar {
+    flex: 1;
+    height: 24px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+
+.tool-bar-fill {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 0.75rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: width 0.5s ease;
+}
+
+.tool-bar-fill.claude { background: var(--accent-purple); }
+.tool-bar-fill.cursor { background: var(--accent-blue); }
+.tool-bar-fill.aider { background: var(--accent-green); }
+.tool-bar-fill.codex { background: var(--accent-yellow); }
+.tool-bar-fill.gemini { background: var(--accent-red); }
+.tool-bar-fill.opencode { background: var(--accent-orange); }
+
+.sparkline {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 60px;
+    padding: 1rem 0;
+}
+
+.sparkline-bar {
+    flex: 1;
+    background: var(--accent-purple);
+    border-radius: 2px 2px 0 0;
+    min-height: 4px;
+    transition: height 0.3s ease;
+}
+
+.repo-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.repo-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+}
+
+.repo-name {
+    font-family: monospace;
+    color: var(--accent-purple);
+}
+
+.repo-commits {
+    font-variant-numeric: tabular-nums;
+}
+
+.repo-tools {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.repo-tool {
+    font-size: 0.75rem;
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    background: var(--bg-secondary);
+}
+
+/* Progress Animation */
+.progress-section {
+    padding: 2rem;
+    text-align: center;
+}
+
+.progress-header {
+    margin-bottom: 1.5rem;
+}
+
+.progress-title {
+    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.progress-subtitle {
+    color: var(--text-secondary);
+}
+
+.repo-list-progress {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 1.5rem;
+}
+
+.repo-progress-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border-radius: 8px;
+    background: var(--bg-tertiary);
+}
+
+.repo-status {
+    font-size: 1.25rem;
+}
+
+.repo-status.pending { color: var(--text-muted); }
+.repo-status.scanning { color: var(--accent-blue); }
+.repo-status.done { color: var(--success); }
+.repo-status.error { color: var(--error); }
+
+.repo-info {
+    flex: 1;
+    text-align: left;
+}
+
+.repo-name-progress {
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+.repo-commits-found {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.overall-progress {
+    margin-top: 1rem;
+}
+
+.progress-bar {
+    height: 8px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.5rem;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--accent-purple);
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    header h1 {
+        font-size: 1.75rem;
+    }
+
+    .tagline {
+        font-size: 1rem;
+    }
+
+    .tool-filters {
+        gap: 0.4rem;
+    }
+
+    .tool-filter {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.85rem;
+    }
+
+    .leaderboard {
+        overflow-x: auto;
+    }
+
+    .leaderboard table {
+        min-width: 600px;
+    }
+
+    .col-tools {
+        display: none;
+    }
+
+    .user-result-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .report-header {
+        padding: 1.5rem;
+    }
+
+    .report-body {
+        padding: 1rem 1.5rem 1.5rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .search-box {
+        flex-direction: column;
+    }
+
+    .search-box button {
+        width: 100%;
+    }
+
+    .tool-filters {
+        justify-content: flex-start;
+    }
+
+    .tool-filter span:not(.tool-icon) {
+        display: none;
+    }
+}

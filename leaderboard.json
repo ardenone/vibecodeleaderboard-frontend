@@ -1,0 +1,65 @@
+{
+  "generated_at": "2026-07-06T22:00:00Z",
+  "rankings": [
+    {
+      "rank": 1,
+      "username": "testuser090",
+      "avatar_url": "https://github.com/testuser090.png?size=80",
+      "profile_url": "https://github.com/testuser090",
+      "commit_count": 497,
+      "commits_30d": 174,
+      "unique_repos": 5,
+      "recent_repos": [
+        "testuser090/repo3",
+        "testuser090/repo2",
+        "testuser090/repo4",
+        "testuser090/repo5",
+        "testuser090/repo1"
+      ],
+      "latest_commit": "2026-03-17T16:00:07.356990+00:00",
+      "by_tool": {
+        "claude": 497
+      }
+    },
+    {
+      "rank": 2,
+      "username": "testuser089",
+      "avatar_url": "https://github.com/testuser089.png?size=80",
+      "profile_url": "https://github.com/testuser089",
+      "commit_count": 497,
+      "commits_30d": 174,
+      "unique_repos": 5,
+      "recent_repos": [
+        "testuser089/repo3",
+        "testuser089/repo2",
+        "testuser089/repo4",
+        "testuser089/repo5",
+        "testuser089/repo1"
+      ],
+      "latest_commit": "2026-03-17T16:00:07.356990+00:00",
+      "by_tool": {
+        "claude": 497
+      }
+    },
+    {
+      "rank": 3,
+      "username": "testuser088",
+      "avatar_url": "https://github.com/testuser088.png?size=80",
+      "profile_url": "https://github.com/testuser088",
+      "commit_count": 497,
+      "commits_30d": 174,
+      "unique_repos": 5,
+      "recent_repos": [
+        "testuser088/repo3",
+        "testuser088/repo2",
+        "testuser088/repo4",
+        "testuser088/repo5",
+        "testuser088/repo1"
+      ],
+      "latest_commit": "2026-03-17T16:00:07.356990+00:00",
+      "by_tool": {
+        "claude": 497
+      }
+    }
+  ]
+}

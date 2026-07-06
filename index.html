@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vibe Code Leaderboard - Tracking AI-Assisted Coding Across GitHub</title>
+    <meta name="description" content="Discover top AI-assisted developers. Track commits across Claude, Cursor, Aider, and more. See your ranking and compare with the community.">
+    <meta property="og:title" content="Vibe Code Leaderboard">
+    <meta property="og:description" content="Tracking AI-assisted coding across GitHub - 152K+ users, 7M+ commits">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="https://vibecodeleaderboard.com/og-image.png">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Vibe Code Leaderboard</h1>
+            <p class="tagline">Tracking AI-assisted coding across GitHub</p>
+        </header>
+
+        <!-- Search Section -->
+        <section class="search-section">
+            <div class="search-box">
+                <input
+                    type="text"
+                    id="searchInput"
+                    placeholder="Search GitHub username..."
+                    autocomplete="off"
+                    aria-label="Search GitHub username"
+                >
+                <button id="searchBtn" aria-label="Search">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="m21 21-4.35-4.35"></path>
+                    </svg>
+                </button>
+            </div>
+            <div id="searchResult" class="search-result"></div>
+        </section>
+
+        <!-- Stats Bar -->
+        <section class="stats-bar">
+            <span id="totalUsers">Loading...</span>
+            <span>·</span>
+            <span id="totalCommits">Loading...</span>
+            <span>·</span>
+            <span id="totalRepos">Loading...</span>
+        </section>
+
+        <!-- Tool Filters -->
+        <section class="tool-filters">
+            <button class="tool-filter active" data-tool="all" title="All Tools">
+                <span class="tool-icon">🎯</span> All Tools
+            </button>
+            <button class="tool-filter" data-tool="claude" title="Claude Code">
+                <span class="tool-icon">🟣</span> Claude
+            </button>
+            <button class="tool-filter" data-tool="cursor" title="Cursor">
+                <span class="tool-icon">🔵</span> Cursor
+            </button>
+            <button class="tool-filter" data-tool="aider" title="Aider">
+                <span class="tool-icon">🟢</span> Aider
+            </button>
+            <button class="tool-filter" data-tool="codex" title="Codex CLI">
+                <span class="tool-icon">🟡</span> Codex
+            </button>
+            <button class="tool-filter" data-tool="gemini" title="Gemini CLI">
+                <span class="tool-icon">🔴</span> Gemini
+            </button>
+            <button class="tool-filter" data-tool="opencode" title="OpenCode">
+                <span class="tool-icon">🟠</span> OpenCode
+            </button>
+        </section>
+
+        <!-- Leaderboard Table -->
+        <section class="leaderboard">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="col-rank">#</th>
+                        <th class="col-user">User</th>
+                        <th class="col-tools">Tool Mix</th>
+                        <th class="col-commits-30d" title="Commits in last 30 days">30d</th>
+                        <th class="col-commits-total">Total</th>
+                        <th class="col-repos">Repos</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboardBody">
+                    <tr>
+                        <td colspan="6" class="loading">Loading leaderboard...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Load More -->
+        <section class="load-more">
+            <button id="loadMoreBtn" class="btn-secondary" style="display: none;">Load More</button>
+        </section>
+    </div>
+
+    <!-- Report Modal -->
+    <div id="reportModal" class="modal">
+        <div class="modal-content">
+            <button class="modal-close" id="closeModal">&times;</button>
+            <div id="reportContent"></div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/report.js"></script>
+</body>
+</html>
