@@ -1,0 +1,8 @@
+# Cloudflare Pages Redirects for Claude Code Leaderboard
+# This file configures URL routing for shareable user profiles
+
+# User profile routing - all /u/* paths serve user.html for client-side routing
+/u/* /user.html 200
+
+# Default fallback (already handled by CF Pages, but explicit here)
+* /index.html 200

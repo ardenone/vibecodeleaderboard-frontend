@@ -1,0 +1,320 @@
+/* Profile page styles for shareable user report cards */
+
+.profile-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+.profile-header {
+    margin-bottom: 2rem;
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    color: var(--accent-purple);
+    text-decoration: none;
+    font-weight: 500;
+    transition: opacity 0.2s;
+}
+
+.back-link:hover {
+    opacity: 0.8;
+}
+
+.profile-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    margin-bottom: 2rem;
+}
+
+.profile-card.loading,
+.profile-card.error,
+.profile-card.not-found {
+    text-align: center;
+    padding: 3rem 2rem;
+}
+
+.profile-header-section {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.profile-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: 3px solid var(--accent-purple);
+    object-fit: cover;
+}
+
+.profile-info {
+    flex: 1;
+}
+
+.profile-name {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem 0;
+}
+
+.profile-name a {
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.profile-name a:hover {
+    color: var(--accent-purple);
+}
+
+.profile-rank {
+    font-size: 1.25rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.profile-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: var(--bg-secondary);
+    padding: 1.5rem;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent-purple);
+}
+
+.tool-mix-section,
+.tool-breakdown-section {
+    margin-bottom: 2rem;
+}
+
+.tool-mix-section h3,
+.tool-breakdown-section h3 {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+.tool-mix-large {
+    height: 40px;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+}
+
+.tool-mix-segment {
+    height: 100%;
+    transition: opacity 0.2s;
+}
+
+.tool-mix-segment:hover {
+    opacity: 0.8;
+}
+
+.tool-mix-segment.claude { background: var(--tool-claude); }
+.tool-mix-segment.cursor { background: var(--tool-cursor); }
+.tool-mix-segment.aider { background: var(--tool-aider); }
+.tool-mix-segment.codex { background: var(--tool-codex); }
+.tool-mix-segment.gemini { background: var(--tool-gemini); }
+.tool-mix-segment.opencode { background: var(--tool-opencode); }
+
+.tool-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.tool-bar-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.tool-name {
+    min-width: 120px;
+    font-weight: 500;
+}
+
+.tool-bar {
+    flex: 1;
+    height: 24px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+
+.tool-bar-fill {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+    transition: width 0.3s ease;
+}
+
+.tool-bar-fill.claude { background: var(--tool-claude); }
+.tool-bar-fill.cursor { background: var(--tool-cursor); }
+.tool-bar-fill.aider { background: var(--tool-aider); }
+.tool-bar-fill.codex { background: var(--tool-codex); }
+.tool-bar-fill.gemini { background: var(--tool-gemini); }
+.tool-bar-fill.opencode { background: var(--tool-opencode); }
+
+.share-section {
+    background: var(--bg-secondary);
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 2rem;
+}
+
+.share-section h3 {
+    font-size: 1.25rem;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+}
+
+.share-section p {
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+}
+
+.share-url {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.share-url input {
+    flex: 1;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: inherit;
+}
+
+.share-url button {
+    padding: 0.75rem 1.5rem;
+    background: var(--accent-purple);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.share-url button:hover {
+    opacity: 0.9;
+}
+
+.back-to-leaderboard {
+    text-align: center;
+    padding: 1rem 0;
+}
+
+.back-to-leaderboard a {
+    color: var(--accent-purple);
+    text-decoration: none;
+    font-weight: 500;
+    transition: opacity 0.2s;
+}
+
+.back-to-leaderboard a:hover {
+    opacity: 0.8;
+}
+
+.not-found-actions {
+    margin: 2rem 0;
+    padding: 1.5rem;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+}
+
+.btn-primary {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    background: var(--accent-purple);
+    color: white;
+    text-decoration: none;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: opacity 0.2s;
+}
+
+.btn-primary:hover {
+    opacity: 0.9;
+}
+
+/* Loading state */
+.loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 3rem;
+    color: var(--text-secondary);
+}
+
+/* Responsive design */
+@media (max-width: 600px) {
+    .profile-container {
+        padding: 1rem;
+    }
+
+    .profile-card {
+        padding: 1.5rem;
+    }
+
+    .profile-header-section {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .profile-avatar {
+        width: 60px;
+        height: 60px;
+    }
+
+    .profile-name {
+        font-size: 1.5rem;
+    }
+
+    .profile-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .tool-bar-wrapper {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .share-url {
+        flex-direction: column;
+    }
+}
