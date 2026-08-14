@@ -19,7 +19,34 @@ window.ReportGenerator = (function() {
         }
     }
 
+    async function checkApiReachability() {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+        try {
+            const response = await fetch(`${getApiBaseUrl()}/health`, {
+                method: 'HEAD',
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            return response.ok || response.status === 404; // 404 means health endpoint doesn't exist but server is reachable
+        } catch (error) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                return false; // Timeout
+            }
+            return false; // Network error
+        }
+    }
+
     async function generate(username) {
+        // Check API reachability first
+        const isReachable = await checkApiReachability();
+        if (!isReachable) {
+            showError('Report generation is temporarily unavailable. The API service is currently unreachable.');
+            return;
+        }
+
         // Open modal
         modal.classList.add('active');
         modalContent.innerHTML = `

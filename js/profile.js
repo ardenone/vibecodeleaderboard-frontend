@@ -60,6 +60,26 @@
         return null;
     }
 
+    async function checkApiReachability() {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+        try {
+            const response = await fetch(`${API_BASE}/health`, {
+                method: 'HEAD',
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            return response.ok || response.status === 404; // 404 means health endpoint doesn't exist but server is reachable
+        } catch (error) {
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                return false; // Timeout
+            }
+            return false; // Network error
+        }
+    }
+
     async function loadUserData(username) {
         try {
             updateMetaTags('loading', username);
@@ -80,8 +100,15 @@
                 }
             }
 
-            // If not found in leaderboard, try API endpoint
-            await loadFromAPI(username);
+            // If not found in leaderboard, check API reachability before trying API endpoint
+            const isReachable = await checkApiReachability();
+            if (isReachable) {
+                await loadFromAPI(username);
+            } else {
+                // API is unreachable, show error instead of "user not found"
+                showError('Profile loading is temporarily unavailable. The API service is currently unreachable.');
+                updateMetaTags('error', username);
+            }
 
         } catch (error) {
             console.error('Error loading user data:', error);
@@ -121,9 +148,9 @@
 
         } catch (error) {
             console.error('Error loading from API:', error);
-            // Fall back to showing "not found" rather than error
-            showUserNotFound(username);
-            updateMetaTags('not_found', username);
+            // This is a network or server error, not "user not found"
+            showError('Failed to load user profile from API. Please try again later.');
+            updateMetaTags('error', username);
         }
     }
 
