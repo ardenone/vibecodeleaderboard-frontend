@@ -1,7 +1,9 @@
-# Cloudflare Pages Redirects for Claude Code Leaderboard
+# Cloudflare Pages Redirects for Vibe Code Leaderboard
 # This file configures URL routing for shareable user profiles
 
-# User profile routing - all /u/* paths serve user.html for client-side routing
+# User profile routing:
+# - functions/u/[username].js handles server-side OG tag injection for social media crawlers
+# - This redirect serves as a fallback if the function fails or isn't deployed
 /u/* /user.html 200
 
 # Default fallback (already handled by CF Pages, but explicit here)
