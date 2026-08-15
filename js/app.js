@@ -479,7 +479,7 @@ function renderUserRow(user) {
         <tr>
             <td class="col-rank">#${user.rank}</td>
             <td class="col-user">
-                <img src="${user.avatar_url}" alt="" class="user-avatar" loading="lazy" onerror="this.style.display='none'">
+                <img src="${user.avatar_url}" alt="" class="user-avatar" width="40" height="40" loading="lazy" onerror="this.style.display='none'">
                 <a href="${user.profile_url}" target="_blank" rel="noopener" class="user-link">${user.username}</a>
             </td>
             <td class="col-tools">

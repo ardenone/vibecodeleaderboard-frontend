@@ -169,7 +169,7 @@
         container.innerHTML = `
             <div class="profile-card">
                 <div class="profile-header">
-                    <img src="${user.avatar_url}" alt="${user.username}" class="profile-avatar" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👤</text></svg>'">
+                    <img src="${user.avatar_url}" alt="${user.username}" class="profile-avatar" width="80" height="80" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👤</text></svg>'">
                     <div class="profile-info">
                         <h1 class="profile-name">
                             <a href="${user.profile_url}" target="_blank" rel="noopener">${user.username}</a>
