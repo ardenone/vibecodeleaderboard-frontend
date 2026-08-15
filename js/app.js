@@ -91,6 +91,7 @@ async function loadLeaderboard() {
         leaderboardData = await response.json();
         applyFilters();
         updateStats();
+        checkDemoData();
     } catch (error) {
         console.error('Error loading leaderboard:', error);
         showNoResults('Failed to load leaderboard data');
@@ -288,7 +289,7 @@ function renderLeaderboard() {
 
 function resetVirtualRows() {
     if (virtualRenderFrame !== null) {
-        window.cancelAnimationFrame(virtualRenderFrame);
+        cancelScheduledVirtualRender();
         virtualRenderFrame = null;
     }
 
@@ -313,10 +314,22 @@ function updateLoadMoreButton() {
 function scheduleVirtualRender() {
     if (virtualRenderFrame !== null) return;
 
-    virtualRenderFrame = window.requestAnimationFrame(() => {
+    const render = () => {
         virtualRenderFrame = null;
         updateVirtualWindow();
-    });
+    };
+
+    virtualRenderFrame = typeof window.requestAnimationFrame === 'function'
+        ? window.requestAnimationFrame(render)
+        : window.setTimeout(render, 0);
+}
+
+function cancelScheduledVirtualRender() {
+    if (typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(virtualRenderFrame);
+    } else {
+        window.clearTimeout(virtualRenderFrame);
+    }
 }
 
 function getVirtualRange(tbody) {
@@ -548,4 +561,18 @@ function loadMore() {
 function showNoResults(message) {
     const tbody = document.getElementById('leaderboardBody');
     tbody.innerHTML = `<tr><td colspan="6" class="no-results">${message}</td></tr>`;
+}
+
+function checkDemoData() {
+    if (!leaderboardData || !leaderboardData.rankings) return;
+
+    // Check if the data contains synthetic testuserNNN entries
+    const hasTestUsers = leaderboardData.rankings.some(user =>
+        user.username && /^testuser\d{3}$/.test(user.username)
+    );
+
+    const demoBanner = document.getElementById('demoDataBanner');
+    if (demoBanner) {
+        demoBanner.style.display = hasTestUsers ? 'block' : 'none';
+    }
 }
