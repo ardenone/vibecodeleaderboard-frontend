@@ -367,16 +367,42 @@
 
     // Global function for copy button
     window.copyShareUrl = function() {
+        const url = window.location.href;
         const input = document.getElementById('shareUrl');
-        input.select();
-        document.execCommand('copy');
-
-        // Show feedback
         const btn = input.nextElementSibling;
+
+        // Try modern Clipboard API first (requires HTTPS or localhost)
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url)
+                .then(() => showCopyFeedback(btn))
+                .catch(() => fallbackCopy(url, btn));
+        } else {
+            // Fallback for non-HTTPS local dev or older browsers
+            fallbackCopy(url, btn);
+        }
+    };
+
+    function showCopyFeedback(btn) {
         const originalText = btn.textContent;
         btn.textContent = 'Copied!';
         setTimeout(() => {
             btn.textContent = originalText;
         }, 2000);
-    };
+    }
+
+    function fallbackCopy(url, btn) {
+        const input = document.getElementById('shareUrl');
+        input.select();
+        try {
+            document.execCommand('copy');
+            showCopyFeedback(btn);
+        } catch (err) {
+            console.error('Failed to copy:', err);
+            const originalText = btn.textContent;
+            btn.textContent = 'Failed';
+            setTimeout(() => {
+                btn.textContent = originalText;
+            }, 2000);
+        }
+    }
 })();
