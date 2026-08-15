@@ -306,6 +306,23 @@ header h1 {
     border-color: var(--accent-purple);
 }
 
+/* Search Results List */
+.search-results-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 1rem;
+    animation: fadeIn 0.3s ease;
+}
+
+.search-results-more {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    padding: 0.5rem;
+    font-style: italic;
+}
+
 /* User Result Card */
 .user-result-card {
     background: var(--bg-tertiary);
@@ -314,6 +331,11 @@ header h1 {
     padding: 1.5rem;
     margin-top: 1rem;
     animation: fadeIn 0.3s ease;
+}
+
+.user-result-card-compact {
+    padding: 1rem;
+    margin-top: 0;
 }
 
 @keyframes fadeIn {
@@ -328,6 +350,11 @@ header h1 {
     margin-bottom: 1rem;
 }
 
+.user-result-card-compact .user-result-header {
+    margin-bottom: 0.5rem;
+    gap: 0.75rem;
+}
+
 .user-result-avatar {
     width: 60px;
     height: 60px;
@@ -335,14 +362,24 @@ header h1 {
     background: var(--bg-secondary);
 }
 
+.user-result-card-compact .user-result-avatar {
+    width: 40px;
+    height: 40px;
+}
+
 .user-result-info h3 {
     font-size: 1.25rem;
     margin-bottom: 0.25rem;
 }
 
+.user-result-card-compact .user-result-info h3 {
+    font-size: 1rem;
+}
+
 .user-result-info .rank {
     color: var(--accent-purple);
     font-weight: 600;
+    font-size: 0.9rem;
 }
 
 .user-result-info .not-found {
@@ -358,6 +395,12 @@ header h1 {
     border-top: 1px solid var(--border-color);
 }
 
+.user-result-card-compact .user-result-stats {
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    padding-top: 0.5rem;
+}
+
 .stat-item {
     text-align: center;
 }
@@ -368,10 +411,18 @@ header h1 {
     margin-bottom: 0.25rem;
 }
 
+.user-result-card-compact .stat-label {
+    font-size: 0.75rem;
+}
+
 .stat-value {
     font-size: 1.25rem;
     font-weight: 600;
     color: var(--text-primary);
+}
+
+.user-result-card-compact .stat-value {
+    font-size: 1rem;
 }
 
 .btn-generate-report {
