@@ -8,7 +8,19 @@ let leaderboardData = null;
 let filteredData = [];
 let currentToolFilter = 'all';
 let currentPage = 1;
+let loadedCount = 0;
 const pageSize = 50;
+const virtualOverscan = 5;
+const defaultRowHeight = 73;
+let virtualRowHeight = defaultRowHeight;
+let virtualStart = 0;
+let virtualEnd = 0;
+let virtualRows = new Map();
+let topSpacer = null;
+let bottomSpacer = null;
+let virtualRenderFrame = null;
+let searchDebounceTimer = null;
+const SEARCH_DEBOUNCE_MS = 200;
 
 // Tool colors
 const TOOL_COLORS = {
@@ -41,9 +53,20 @@ function setupEventListeners() {
     const searchInput = document.getElementById('searchInput');
     const searchBtn = document.getElementById('searchBtn');
 
-    searchBtn.addEventListener('click', handleSearch);
+    searchBtn.addEventListener('click', () => {
+        clearTimeout(searchDebounceTimer);
+        handleSearch();
+    });
     searchInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') handleSearch();
+        if (e.key === 'Enter') {
+            clearTimeout(searchDebounceTimer);
+            handleSearch();
+        }
+    });
+    // Debounced input search
+    searchInput.addEventListener('input', () => {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(handleSearch, SEARCH_DEBOUNCE_MS);
     });
 
     // Tool filters
@@ -53,6 +76,10 @@ function setupEventListeners() {
 
     // Load more
     document.getElementById('loadMoreBtn').addEventListener('click', loadMore);
+
+    // Recalculate the bounded row window as the page viewport moves.
+    window.addEventListener('scroll', scheduleVirtualRender, { passive: true });
+    window.addEventListener('resize', scheduleVirtualRender);
 }
 
 async function loadLeaderboard() {
@@ -84,13 +111,16 @@ function handleSearch() {
         return;
     }
 
-    // Search in current leaderboard
-    const user = leaderboardData.rankings.find(u =>
-        u.username.toLowerCase() === query.toLowerCase()
-    );
+    // Search for substring matches (case-insensitive)
+    const queryLower = query.toLowerCase();
+    const matchingUsers = leaderboardData.rankings.filter(u =>
+        u.username.toLowerCase().includes(queryLower)
+    ).sort((a, b) => a.rank - b.rank); // Sort by rank ascending
 
-    if (user) {
-        showUserResult(user, resultDiv);
+    if (matchingUsers.length > 0) {
+        // Show top 10 results
+        const topResults = matchingUsers.slice(0, 10);
+        showMultipleUserResults(topResults, matchingUsers.length, resultDiv);
     } else {
         showGenerateReportOption(query, resultDiv);
     }
@@ -103,7 +133,7 @@ function showUserResult(user, container) {
     container.innerHTML = `
         <div class="user-result-card">
             <div class="user-result-header">
-                <img src="${user.avatar_url}" alt="${user.username}" class="user-result-avatar" onerror="this.style.display='none'">
+                <img src="${user.avatar_url}" alt="${user.username}" class="user-result-avatar" width="60" height="60" onerror="this.style.display='none'">
                 <div class="user-result-info">
                     <h3>
                         <a href="${user.profile_url}" target="_blank" rel="noopener">${user.username}</a>
@@ -134,6 +164,55 @@ function showUserResult(user, container) {
     `;
 }
 
+function showMultipleUserResults(users, totalCount, container) {
+    const resultsList = users.map(user => {
+        const totalCommits = user.by_tool || {};
+        const toolMix = generateToolMix(totalCommits);
+        return `
+            <div class="user-result-card user-result-card-compact">
+                <div class="user-result-header">
+                    <img src="${user.avatar_url}" alt="${user.username}" class="user-result-avatar" width="60" height="60" onerror="this.style.display='none'">
+                    <div class="user-result-info">
+                        <h3>
+                            <a href="${user.profile_url}" target="_blank" rel="noopener">${user.username}</a>
+                        </h3>
+                        <div class="rank">#${user.rank} of ${leaderboardData.rankings.length.toLocaleString()}</div>
+                    </div>
+                </div>
+                <div class="user-result-stats">
+                    <div class="stat-item">
+                        <div class="stat-label">30 Days</div>
+                        <div class="stat-value">${user.commits_30d?.toLocaleString() || '0'}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Total</div>
+                        <div class="stat-value">${user.commit_count.toLocaleString()}</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Repos</div>
+                        <div class="stat-value">${user.unique_repos}</div>
+                    </div>
+                </div>
+                ${toolMix ? `
+                <div style="margin-top: 0.5rem;">
+                    <div class="tool-mix" title="${getMixTooltip(totalCommits)}">${toolMix}</div>
+                </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+
+    const showingMore = totalCount > users.length;
+    const moreText = showingMore ? `<div class="search-results-more">and ${totalCount - users.length} more...</div>` : '';
+
+    container.innerHTML = `
+        <div class="search-results-list">
+            ${resultsList}
+            ${moreText}
+        </div>
+    `;
+}
+
 function showGenerateReportOption(username, container) {
     // Validate avatar exists
     const avatarUrl = `https://github.com/${username}.png`;
@@ -141,7 +220,7 @@ function showGenerateReportOption(username, container) {
     container.innerHTML = `
         <div class="user-result-card">
             <div class="user-result-header">
-                <img src="${avatarUrl}" alt="${username}" class="user-result-avatar" onerror="this.parentElement.innerHTML='<div class=\\\"user-result-avatar\\\"></div>'">
+                <img src="${avatarUrl}" alt="${username}" class="user-result-avatar" width="60" height="60" onerror="this.parentElement.innerHTML='<div class=\\\"user-result-avatar\\\"></div>'">
                 <div class="user-result-info">
                     <h3>${username}</h3>
                     <div class="not-found">Not on the leaderboard yet</div>
@@ -163,7 +242,6 @@ function handleToolFilter(btn) {
 
     // Update filter
     currentToolFilter = btn.dataset.tool;
-    currentPage = 1;
     applyFilters();
 }
 
@@ -181,27 +259,216 @@ function applyFilters() {
     }
 
     filteredData = data;
+    resetVirtualRows();
+    currentPage = 1;
     renderLeaderboard();
 }
 
 function renderLeaderboard() {
     const tbody = document.getElementById('leaderboardBody');
-    const loadMoreBtn = document.getElementById('loadMoreBtn');
 
     if (filteredData.length === 0) {
+        resetVirtualRows();
         tbody.innerHTML = '<tr><td colspan="6" class="no-results">No users found for this filter</td></tr>';
-        loadMoreBtn.style.display = 'none';
+        updateLoadMoreButton();
         return;
     }
 
-    const start = 0;
-    const end = currentPage * pageSize;
-    const pageData = filteredData.slice(start, end);
+    // The loaded page is still capped by Load More, but the DOM is capped by
+    // the viewport window inside that page.
+    if (loadedCount === 0) {
+        loadedCount = Math.min(pageSize, filteredData.length);
+    }
+    loadedCount = Math.min(loadedCount, filteredData.length);
+    currentPage = Math.ceil(loadedCount / pageSize);
 
-    tbody.innerHTML = pageData.map(user => renderUserRow(user)).join('');
+    updateVirtualWindow();
+    updateLoadMoreButton();
+}
 
-    // Show/hide load more
-    loadMoreBtn.style.display = end < filteredData.length ? 'inline-block' : 'none';
+function resetVirtualRows() {
+    if (virtualRenderFrame !== null) {
+        window.cancelAnimationFrame(virtualRenderFrame);
+        virtualRenderFrame = null;
+    }
+
+    virtualStart = 0;
+    virtualEnd = 0;
+    loadedCount = 0;
+    virtualRows = new Map();
+    topSpacer = null;
+    bottomSpacer = null;
+
+    const tbody = document.getElementById('leaderboardBody');
+    if (tbody) tbody.replaceChildren();
+}
+
+function updateLoadMoreButton() {
+    const loadMoreBtn = document.getElementById('loadMoreBtn');
+    if (!loadMoreBtn) return;
+
+    loadMoreBtn.style.display = loadedCount < filteredData.length ? 'inline-block' : 'none';
+}
+
+function scheduleVirtualRender() {
+    if (virtualRenderFrame !== null) return;
+
+    virtualRenderFrame = window.requestAnimationFrame(() => {
+        virtualRenderFrame = null;
+        updateVirtualWindow();
+    });
+}
+
+function getVirtualRange(tbody) {
+    const bodyTop = tbody.getBoundingClientRect().top + (window.scrollY || window.pageYOffset || 0);
+    const scrollTop = Math.max(0, (window.scrollY || window.pageYOffset || 0) - bodyTop);
+    const viewportHeight = Math.max(window.innerHeight || 0, virtualRowHeight);
+    const firstVisible = Math.floor(scrollTop / virtualRowHeight);
+    const visibleRows = Math.ceil(viewportHeight / virtualRowHeight);
+
+    return {
+        start: Math.max(0, firstVisible - virtualOverscan),
+        end: Math.min(
+            loadedCount,
+            firstVisible + visibleRows + virtualOverscan
+        )
+    };
+}
+
+function createVirtualSpacer(className, height) {
+    const row = document.createElement('tr');
+    row.className = `leaderboard-virtual-spacer ${className}`;
+    row.setAttribute('aria-hidden', 'true');
+
+    const cell = document.createElement('td');
+    cell.colSpan = 6;
+    cell.style.height = `${Math.max(0, height)}px`;
+    cell.style.padding = '0';
+    cell.style.border = '0';
+    cell.style.lineHeight = '0';
+    cell.textContent = '';
+    row.appendChild(cell);
+
+    return row;
+}
+
+function setVirtualSpacerHeight(spacer, height) {
+    if (spacer?.firstElementChild) {
+        spacer.firstElementChild.style.height = `${Math.max(0, height)}px`;
+    }
+}
+
+function createLeaderboardRow(index) {
+    const template = document.createElement('template');
+    template.innerHTML = renderUserRow(filteredData[index]).trim();
+    const row = template.content.firstElementChild;
+    row.dataset.virtualIndex = index;
+    return row;
+}
+
+function renderVirtualWindow(start, end) {
+    const tbody = document.getElementById('leaderboardBody');
+    const fragment = document.createDocumentFragment();
+    const nextRows = new Map();
+
+    topSpacer = createVirtualSpacer('virtual-spacer-top', start * virtualRowHeight);
+    fragment.appendChild(topSpacer);
+
+    for (let index = start; index < end; index++) {
+        const row = createLeaderboardRow(index);
+        nextRows.set(index, row);
+        fragment.appendChild(row);
+    }
+
+    bottomSpacer = createVirtualSpacer(
+        'virtual-spacer-bottom',
+        (loadedCount - end) * virtualRowHeight
+    );
+    fragment.appendChild(bottomSpacer);
+
+    // This replaces only the bounded viewport window, never the full loaded
+    // slice. Load More can therefore extend the existing window incrementally.
+    tbody.replaceChildren(fragment);
+    virtualRows = nextRows;
+    virtualStart = start;
+    virtualEnd = end;
+}
+
+function syncVirtualWindow(start, end) {
+    if (!topSpacer || !bottomSpacer) {
+        renderVirtualWindow(start, end);
+        return;
+    }
+
+    if (start === virtualStart && end === virtualEnd) {
+        setVirtualSpacerHeight(topSpacer, start * virtualRowHeight);
+        setVirtualSpacerHeight(bottomSpacer, (loadedCount - end) * virtualRowHeight);
+        return;
+    }
+
+    const overlaps = start < virtualEnd && end > virtualStart;
+    if (!overlaps) {
+        renderVirtualWindow(start, end);
+        return;
+    }
+
+    const previousStart = virtualStart;
+    const previousEnd = virtualEnd;
+
+    // Discard rows that scrolled out of the window.
+    for (let index = previousStart; index < Math.min(start, previousEnd); index++) {
+        virtualRows.get(index)?.remove();
+        virtualRows.delete(index);
+    }
+    for (let index = Math.max(end, previousStart); index < previousEnd; index++) {
+        virtualRows.get(index)?.remove();
+        virtualRows.delete(index);
+    }
+
+    // Add rows entering at the top/bottom without touching rows that remain.
+    if (start < previousStart) {
+        const fragment = document.createDocumentFragment();
+        for (let index = start; index < previousStart; index++) {
+            const row = createLeaderboardRow(index);
+            virtualRows.set(index, row);
+            fragment.appendChild(row);
+        }
+        tbody.insertBefore(fragment, virtualRows.get(previousStart) || bottomSpacer);
+    }
+
+    if (end > previousEnd) {
+        const fragment = document.createDocumentFragment();
+        for (let index = previousEnd; index < end; index++) {
+            const row = createLeaderboardRow(index);
+            virtualRows.set(index, row);
+            fragment.appendChild(row);
+        }
+        tbody.insertBefore(fragment, bottomSpacer);
+    }
+
+    virtualStart = start;
+    virtualEnd = end;
+    setVirtualSpacerHeight(topSpacer, start * virtualRowHeight);
+    setVirtualSpacerHeight(bottomSpacer, (loadedCount - end) * virtualRowHeight);
+}
+
+function updateVirtualWindow() {
+    const tbody = document.getElementById('leaderboardBody');
+    if (!tbody || loadedCount === 0) return;
+
+    const range = getVirtualRange(tbody);
+    syncVirtualWindow(range.start, range.end);
+
+    // Account for responsive/font changes instead of relying solely on the
+    // initial estimate. All rows use the same layout, so one measurement is
+    // enough to keep the spacer offsets accurate.
+    const firstRow = virtualRows.values().next().value;
+    const measuredHeight = firstRow?.getBoundingClientRect().height || 0;
+    if (measuredHeight > 0 && Math.abs(measuredHeight - virtualRowHeight) > 0.5) {
+        virtualRowHeight = measuredHeight;
+        const updatedRange = getVirtualRange(tbody);
+        syncVirtualWindow(updatedRange.start, updatedRange.end);
+    }
 }
 
 function renderUserRow(user) {
@@ -266,8 +533,16 @@ function updateStats() {
 }
 
 function loadMore() {
-    currentPage++;
-    renderLeaderboard();
+    if (loadedCount >= filteredData.length) return;
+
+    const previousCount = loadedCount;
+    loadedCount = Math.min(loadedCount + pageSize, filteredData.length);
+    currentPage = Math.ceil(loadedCount / pageSize);
+
+    if (loadedCount === previousCount) return;
+
+    updateVirtualWindow();
+    updateLoadMoreButton();
 }
 
 function showNoResults(message) {
