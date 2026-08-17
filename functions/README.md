@@ -9,7 +9,7 @@ Intercepts requests to `/u/[username]` paths and injects server-side Open Graph 
 
 ### How It Works
 1. **Request Interception**: The function runs before static file serving for any `/u/[username]` path
-2. **Data Loading**: Fetches `leaderboard.json` to find the requested user's data
+2. **Data Loading**: Reads `leaderboard.json` through Cloudflare Pages' `ASSETS` binding to find the requested user's data
 3. **Template Processing**: Loads the `user.html` template
 4. **Tag Injection**: Replaces static OG meta tags with dynamic user-specific content
 5. **Response**: Returns the modified HTML with proper caching headers
@@ -32,7 +32,7 @@ Intercepts requests to `/u/[username]` paths and injects server-side Open Graph 
 ```html
 <meta property="og:title" content="#123 johndoe - Vibe Code Leaderboard">
 <meta property="og:description" content="johndoe has 5,432 AI-assisted commits across 12 repos. Ranked #123 on the Vibe Code Leaderboard.">
-<meta property="og:image" content="https://vibecodeleaderboard.com/og-image.png">
+<meta property="og:image" content="https://vibecodeleaderboard.com/og/testuser090">
 <meta property="og:url" content="https://vibecodeleaderboard.com/u/johndoe">
 ```
 
@@ -48,13 +48,30 @@ This function automatically deploys with the Cloudflare Pages project via the `w
 ### Local Testing
 To test locally with Wrangler:
 ```bash
-npm install -g wrangler
-wrangler pages dev . --compatibility-flag=nodejs_compat
+wrangler pages dev .
 ```
 
 Then visit `http://localhost:8788/u/testuser090` to verify the function works.
 
-### Future Enhancements
-- **Dynamic OG image generation**: Create user-specific preview cards with stats, avatars, and rank
-- **API integration**: Fall back to live API if user not found in cached leaderboard.json
-- **Advanced caching**: Implement per-user cache invalidation when leaderboard updates
+## Per-user OG images (`og/[username].js`)
+
+Known users get a generated SVG card at `/og/<username>`, containing their username,
+rank, commit count, and repository count. The profile function points `og:image` and
+Twitter's image tag at this endpoint; unknown users retain the static PNG fallback.
+
+## Automated testing
+
+Run the metadata tests with Node's ESM mode:
+
+```bash
+node --experimental-default-type=module functions/test-og-injection.js
+```
+
+For an end-to-end Pages runtime test, use Wrangler:
+
+```bash
+wrangler pages dev .
+```
+
+Then visit `http://localhost:8788/u/testuser090` and inspect the raw HTML, not just the
+browser DOM.

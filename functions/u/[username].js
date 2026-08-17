@@ -1,162 +1,210 @@
-// Cloudflare Pages Function for user profile pages with server-side Open Graph tags
-// This function intercepts /u/[username] requests and injects proper OG tags for social media crawlers
+const SITE_NAME = 'Vibe Code Leaderboard';
+const DEFAULT_IMAGE_PATH = '/og-image.png';
 
+// Cloudflare Pages Function for /u/<username> profile pages. The HTML is
+// rendered here because link-preview crawlers do not run js/profile.js.
 export async function onRequest(context) {
-  const { request, env } = context;
-  const url = new URL(request.url);
-  const username = url.pathname.split('/').pop();
+  const url = new URL(context.request.url);
+  const username = getRouteUsername(context, url);
+
+  if (!username) {
+    return new Response('User profile not found', { status: 404 });
+  }
 
   try {
-    // Try to load leaderboard data to find user information
-    let userData = null;
-    try {
-      // In Cloudflare Pages, we can access files from the project root
-      const leaderboardUrl = new URL('/leaderboard.json', url.origin);
-      const leaderboardResponse = await fetch(leaderboardUrl.toString());
-
-      if (leaderboardResponse.ok) {
-        const leaderboardData = await leaderboardResponse.json();
-        userData = leaderboardData.rankings.find(
-          user => user.username.toLowerCase() === username.toLowerCase()
-        );
-      }
-    } catch (error) {
-      console.error('Error loading leaderboard data:', error);
-      // Continue with default tags if leaderboard data fails to load
-    }
-
-    // Load the user.html template
-    const templateUrl = new URL('/user.html', url.origin);
-    const templateResponse = await fetch(templateUrl.toString());
+    const userData = await loadUserData(context, username);
+    const templateResponse = await fetchAsset(context, '/user.html');
 
     if (!templateResponse.ok) {
-      return new Response('Template not found', { status: 404 });
+      return new Response('Profile template not found', {
+        status: templateResponse.status || 404,
+      });
     }
 
-    let html = await templateResponse.text();
+    const metadata = generateOGMetaTags(username, userData, url);
+    const html = injectOGTags(await templateResponse.text(), metadata);
 
-    // Generate OG meta tags based on user data
-    const ogTags = generateOGMetaTags(username, userData, url);
-
-    // Replace the static OG tags in the HTML template
-    html = injectOGTags(html, ogTags, userData, url);
-
-    // Return the modified HTML with proper content type
     return new Response(html, {
       headers: {
-        'Content-Type': 'text/html;charset=UTF-8',
-        'Cache-Control': 'public, max-age=300' // Cache for 5 minutes
-      }
+        'Content-Type': 'text/html; charset=UTF-8',
+        'Cache-Control': 'public, max-age=300, s-maxage=300',
+      },
     });
-
   } catch (error) {
-    console.error('Error in user profile function:', error);
+    console.error('Error rendering user profile:', error);
 
-    // On error, serve the original template (which has client-side fallback)
+    // Keep the page usable if the leaderboard or HTML transform fails. The
+    // unmodified template still lets the browser-side profile code recover.
     try {
-      const templateUrl = new URL('/user.html', url.origin);
-      const templateResponse = await fetch(templateUrl.toString());
-      const html = await templateResponse.text();
-
-      return new Response(html, {
+      const fallback = await fetchAsset(context, '/user.html');
+      return new Response(fallback.body, {
+        status: fallback.status,
         headers: {
-          'Content-Type': 'text/html;charset=UTF-8',
-          'Cache-Control': 'public, max-age=60'
-        }
+          'Content-Type': 'text/html; charset=UTF-8',
+          'Cache-Control': 'public, max-age=60, s-maxage=60',
+        },
       });
     } catch (fallbackError) {
+      console.error('Error loading profile fallback:', fallbackError);
       return new Response('Error loading profile', { status: 500 });
     }
   }
 }
 
-function generateOGMetaTags(username, userData, url) {
+// ASSETS is the Pages-provided binding for reading static files from the
+// deployment. The context.next fallback keeps the function easy to exercise
+// with a minimal test context and works with Pages' asset server as well.
+export async function fetchAsset(context, path) {
+  const assetUrl = new URL(path, context.request.url);
+
+  if (context.env?.ASSETS?.fetch) {
+    return context.env.ASSETS.fetch(assetUrl);
+  }
+
+  if (typeof context.next === 'function') {
+    return context.next(new Request(assetUrl, context.request));
+  }
+
+  throw new Error('Cloudflare Pages ASSETS binding is unavailable');
+}
+
+export function getRouteUsername(context, url = new URL(context.request.url)) {
+  const routeUsername = context.params?.username;
+  const pathUsername = url.pathname.match(/^\/u\/([^/]+)\/?$/)?.[1];
+  const encodedUsername = routeUsername || pathUsername || '';
+
+  try {
+    return decodeURIComponent(encodedUsername).trim();
+  } catch {
+    return '';
+  }
+}
+
+export async function loadUserData(context, username) {
+  try {
+    const response = await fetchAsset(context, '/leaderboard.json');
+    if (!response.ok) return null;
+
+    const leaderboard = await response.json();
+    if (!Array.isArray(leaderboard?.rankings)) return null;
+
+    return leaderboard.rankings.find(
+      user => typeof user?.username === 'string' &&
+        user.username.toLowerCase() === username.toLowerCase()
+    ) || null;
+  } catch (error) {
+    console.error('Error loading leaderboard data:', error);
+    return null;
+  }
+}
+
+export function generateOGMetaTags(username, userData, url) {
+  const profileUrl = url.href;
+
   if (!userData) {
-    // User not found or data unavailable - use generic tags
     return {
-      title: `${username} - Vibe Code Leaderboard`,
-      description: `${username} is not yet on the Vibe Code Leaderboard. Check the full leaderboard to see top AI-assisted developers.`,
-      image: 'https://vibecodeleaderboard.com/og-image.png',
-      url: url.href
+      title: `${username} - ${SITE_NAME}`,
+      description: `${username} is not yet on the ${SITE_NAME}. Check the full leaderboard to see top AI-assisted developers.`,
+      image: new URL(DEFAULT_IMAGE_PATH, url).href,
+      imageType: 'image/png',
+      imageAlt: SITE_NAME,
+      url: profileUrl,
     };
   }
 
-  // User found - generate personalized tags
-  const description = `${userData.username} has ${userData.commit_count.toLocaleString()} AI-assisted commits across ${userData.unique_repos} repos. Ranked #${userData.rank} on the Vibe Code Leaderboard.`;
+  const displayUsername = String(userData.username);
+  const description = `${displayUsername} has ${formatNumber(userData.commit_count)} AI-assisted commits across ${formatNumber(userData.unique_repos)} repos. Ranked #${userData.rank} on the ${SITE_NAME}.`;
 
   return {
-    title: `#${userData.rank} ${userData.username} - Vibe Code Leaderboard`,
-    description: description,
-    image: generateOGImageUrl(userData),
-    url: url.href
+    title: `#${userData.rank} ${displayUsername} - ${SITE_NAME}`,
+    description,
+    image: generateOGImageUrl(userData, url),
+    imageType: 'image/svg+xml',
+    imageAlt: `${displayUsername}'s ${SITE_NAME} profile`,
+    url: profileUrl,
   };
 }
 
-function injectOGTags(html, ogTags, userData, url) {
-  // Helper function to replace or add meta tags
-  const replaceOrAddMeta = (content, property, name, contentValue) => {
-    const regex = new RegExp(`<meta[^>]*property=["']${property}["'][^>]*>`, 'i');
-    const regexName = new RegExp(`<meta[^>]*name=["']${name}["'][^>]*>`, 'i');
-
-    const replacement = property
-      ? `<meta property="${property}" content="${contentValue}">`
-      : `<meta name="${name}" content="${contentValue}">`;
-
-    // Try to replace existing property tag
-    if (property && regex.test(content)) {
-      return content.replace(regex, replacement);
-    }
-    // Try to replace existing name tag
-    else if (name && regexName.test(content)) {
-      return content.replace(regexName, replacement);
-    }
-    // If neither exists, add after the existing meta tags
-    else {
-      const metaInsertionPoint = content.indexOf('</head>');
-      if (metaInsertionPoint !== -1) {
-        return content.slice(0, metaInsertionPoint) + replacement + '\n    ' + content.slice(metaInsertionPoint);
-      }
-      return content;
-    }
-  };
-
-  // Replace title
-  html = html.replace(
-    /<title>.*?<\/title>/i,
-    `<title>${ogTags.title}</title>`
-  );
-
-  // Replace OG meta tags
-  html = replaceOrAddMeta(html, 'og:title', null, ogTags.title);
-  html = replaceOrAddMeta(html, 'og:description', null, ogTags.description);
-  html = replaceOrAddMeta(html, 'og:image', null, ogTags.image);
-  html = replaceOrAddMeta(html, 'og:url', null, ogTags.url);
-
-  // Replace Twitter meta tags
-  html = replaceOrAddMeta(html, null, 'twitter:title', ogTags.title);
-  html = replaceOrAddMeta(html, null, 'twitter:description', ogTags.description);
-  html = replaceOrAddMeta(html, null, 'twitter:image', ogTags.image);
-
-  // Replace canonical link
-  const canonicalRegex = /<link[^>]*rel=["']canonical["'][^>]*>/i;
-  if (canonicalRegex.test(html)) {
-    html = html.replace(
-      canonicalRegex,
-      `<link rel="canonical" href="${ogTags.url}">`
-    );
-  } else {
-    const metaInsertionPoint = html.indexOf('</head>');
-    if (metaInsertionPoint !== -1) {
-      html = html.slice(0, metaInsertionPoint) + `    <link rel="canonical" href="${ogTags.url}">\n    ` + html.slice(metaInsertionPoint);
-    }
+export function generateOGImageUrl(userData, url) {
+  if (!userData?.username) {
+    return new URL(DEFAULT_IMAGE_PATH, url).href;
   }
 
-  return html;
+  return new URL(`/og/${encodeURIComponent(userData.username)}`, url).href;
 }
 
-function generateOGImageUrl(userData) {
-  // For now, return the default OG image
-  // In the future, this could generate dynamic images or use a service
-  // https://api.vibecodeleaderboard.com/og/${userData.username}.png
-  return 'https://vibecodeleaderboard.com/og-image.png';
+export function injectOGTags(html, ogTags) {
+  const tags = [
+    ['property', 'og:title', ogTags.title],
+    ['property', 'og:description', ogTags.description],
+    ['property', 'og:image', ogTags.image],
+    ['property', 'og:image:type', ogTags.imageType],
+    ['property', 'og:image:alt', ogTags.imageAlt],
+    ['property', 'og:image:width', '1200'],
+    ['property', 'og:image:height', '630'],
+    ['property', 'og:url', ogTags.url],
+    ['name', 'description', ogTags.description],
+    ['name', 'twitter:title', ogTags.title],
+    ['name', 'twitter:description', ogTags.description],
+    ['name', 'twitter:image', ogTags.image],
+    ['name', 'twitter:image:alt', ogTags.imageAlt],
+  ];
+
+  let output = html.replace(
+    /<title>.*?<\/title>/is,
+    `<title>${escapeHtml(ogTags.title)}</title>`
+  );
+
+  for (const [attribute, value, content] of tags) {
+    output = replaceOrAddMeta(output, attribute, value, content);
+  }
+
+  const canonical = `<link rel="canonical" href="${escapeHtml(ogTags.url)}">`;
+  const canonicalPattern = /<link\b[^>]*\brel\s*=\s*["']canonical["'][^>]*>/i;
+  if (canonicalPattern.test(output)) {
+    output = output.replace(canonicalPattern, canonical);
+  } else {
+    output = insertBeforeHeadClose(output, canonical);
+  }
+
+  return output;
+}
+
+function replaceOrAddMeta(html, attribute, value, content) {
+  const escapedValue = escapeHtml(value);
+  const escapedContent = escapeHtml(content);
+  const pattern = new RegExp(
+    `<meta\\b[^>]*\\b${attribute}\\s*=\\s*["']${escapeRegExp(value)}["'][^>]*>`,
+    'i'
+  );
+  const replacement = `<meta ${attribute}="${escapedValue}" content="${escapedContent}">`;
+
+  if (pattern.test(html)) {
+    return html.replace(pattern, replacement);
+  }
+
+  return insertBeforeHeadClose(html, replacement);
+}
+
+function insertBeforeHeadClose(html, value) {
+  return html.replace(/<\/head\s*>/i, `${value}\n    $&`);
+}
+
+export function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, character => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[character]));
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function formatNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toLocaleString('en-US') : '0';
 }

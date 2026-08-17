@@ -316,53 +316,71 @@
         const ogTitle = document.querySelector('meta[property="og:title"]');
         const ogDesc = document.querySelector('meta[property="og:description"]');
         const ogImage = document.querySelector('meta[property="og:image"]');
+        const ogImageType = document.querySelector('meta[property="og:image:type"]');
+        const ogImageAlt = document.querySelector('meta[property="og:image:alt"]');
         const ogUrl = document.querySelector('meta[property="og:url"]');
         const twitterTitle = document.querySelector('meta[name="twitter:title"]');
         const twitterDesc = document.querySelector('meta[name="twitter:description"]');
         const twitterImage = document.querySelector('meta[name="twitter:image"]');
+        const twitterImageAlt = document.querySelector('meta[name="twitter:image:alt"]');
         const canonical = document.querySelector('link[rel="canonical"]');
 
         if (status === 'success' && userData) {
             const description = `${userData.username} has ${userData.commit_count.toLocaleString()} AI-assisted commits across ${userData.unique_repos} repos. Ranked #${userData.rank} on the Vibe Code Leaderboard.`;
+            const image = generateOGImageUrl(userData);
+            const imageAlt = `${userData.username}'s Vibe Code Leaderboard profile`;
 
             ogTitle?.setAttribute('content', `#${userData.rank} ${userData.username} - Vibe Code Leaderboard`);
             ogDesc?.setAttribute('content', description);
-            ogImage?.setAttribute('content', generateOGImageUrl(userData));
+            ogImage?.setAttribute('content', image);
+            ogImageType?.setAttribute('content', 'image/svg+xml');
+            ogImageAlt?.setAttribute('content', imageAlt);
             ogUrl?.setAttribute('content', window.location.href);
             twitterTitle?.setAttribute('content', `#${userData.rank} ${userData.username} - Vibe Code Leaderboard`);
             twitterDesc?.setAttribute('content', description);
-            twitterImage?.setAttribute('content', generateOGImageUrl(userData));
+            twitterImage?.setAttribute('content', image);
+            twitterImageAlt?.setAttribute('content', imageAlt);
             canonical?.setAttribute('href', window.location.href);
         } else if (status === 'not_found') {
             const description = `${username} is not yet on the Vibe Code Leaderboard. Check the full leaderboard to see top AI-assisted developers.`;
+            const image = getDefaultOGImageUrl();
 
             ogTitle?.setAttribute('content', `${username} - Vibe Code Leaderboard`);
             ogDesc?.setAttribute('content', description);
-            ogImage?.setAttribute('content', 'https://vibecodeleaderboard.com/og-image.png');
+            ogImage?.setAttribute('content', image);
+            ogImageType?.setAttribute('content', 'image/png');
+            ogImageAlt?.setAttribute('content', 'Vibe Code Leaderboard');
             ogUrl?.setAttribute('content', window.location.href);
             twitterTitle?.setAttribute('content', `${username} - Vibe Code Leaderboard`);
             twitterDesc?.setAttribute('content', description);
-            twitterImage?.setAttribute('content', 'https://vibecodeleaderboard.com/og-image.png');
+            twitterImage?.setAttribute('content', image);
+            twitterImageAlt?.setAttribute('content', 'Vibe Code Leaderboard');
             canonical?.setAttribute('href', window.location.href);
         } else {
             // Default/loading state
+            const image = getDefaultOGImageUrl();
+
             ogTitle?.setAttribute('content', 'Vibe Code Leaderboard');
             ogDesc?.setAttribute('content', 'Tracking AI-assisted coding across GitHub');
-            ogImage?.setAttribute('content', 'https://vibecodeleaderboard.com/og-image.png');
+            ogImage?.setAttribute('content', image);
+            ogImageType?.setAttribute('content', 'image/png');
+            ogImageAlt?.setAttribute('content', 'Vibe Code Leaderboard');
             ogUrl?.setAttribute('content', window.location.href);
             twitterTitle?.setAttribute('content', 'Vibe Code Leaderboard');
             twitterDesc?.setAttribute('content', 'Tracking AI-assisted coding across GitHub');
-            twitterImage?.setAttribute('content', 'https://vibecodeleaderboard.com/og-image.png');
+            twitterImage?.setAttribute('content', image);
+            twitterImageAlt?.setAttribute('content', 'Vibe Code Leaderboard');
             canonical?.setAttribute('href', window.location.href);
         }
     }
 
     function generateOGImageUrl(userData) {
-        // Use a service to generate OG image or return default
-        // For now, return the default OG image
-        // In the future, this could use a service like:
-        // https://api.vibecodeleaderboard.com/og/${userData.username}.png
-        return 'https://vibecodeleaderboard.com/og-image.png';
+        if (!userData?.username) return getDefaultOGImageUrl();
+        return new URL(`/og/${encodeURIComponent(userData.username)}`, window.location.origin).href;
+    }
+
+    function getDefaultOGImageUrl() {
+        return new URL('/og-image.png', window.location.origin).href;
     }
 
     // Global function for copy button
