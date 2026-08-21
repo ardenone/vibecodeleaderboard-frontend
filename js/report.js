@@ -223,6 +223,13 @@ window.ReportGenerator = (function() {
     }
 
     function showError(message) {
+        // Reachability is checked before opening the modal, so make failures
+        // visible when the API goes down between the check and the click.
+        if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+        }
+        modal.classList.add('active');
         modalContent.innerHTML = `
             <div class="progress-section">
                 <div class="repo-status error">✕</div>
