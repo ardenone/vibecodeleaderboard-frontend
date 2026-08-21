@@ -2,6 +2,7 @@
 const API_BASE = window.location.hostname === 'localhost'
     ? 'http://localhost:8080'
     : `https://api.${window.location.hostname.replace(/^www\./, '')}`;
+const API_REACHABILITY_TIMEOUT_MS = 2000;
 
 // State
 let leaderboardData = null;
@@ -127,6 +128,23 @@ function handleSearch() {
     }
 }
 
+async function checkApiReachability() {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_REACHABILITY_TIMEOUT_MS);
+
+    try {
+        const response = await fetch(`${API_BASE}/health`, {
+            method: 'HEAD',
+            signal: controller.signal
+        });
+        return response.ok || response.status === 404;
+    } catch (error) {
+        return false;
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
 function showUserResult(user, container) {
     const totalCommits = user.by_tool || {};
     const toolMix = generateToolMix(totalCommits);
@@ -214,12 +232,12 @@ function showMultipleUserResults(users, totalCount, container) {
     `;
 }
 
-function showGenerateReportOption(username, container) {
+async function showGenerateReportOption(username, container) {
     // Validate avatar exists
     const avatarUrl = `https://github.com/${username}.png`;
 
     container.innerHTML = `
-        <div class="user-result-card">
+        <div class="user-result-card" data-report-option>
             <div class="user-result-header">
                 <img src="${avatarUrl}" alt="${username}" class="user-result-avatar" width="60" height="60" onerror="this.parentElement.innerHTML='<div class=\\\"user-result-avatar\\\"></div>'">
                 <div class="user-result-info">
@@ -227,11 +245,30 @@ function showGenerateReportOption(username, container) {
                     <div class="not-found">Not on the leaderboard yet</div>
                 </div>
             </div>
-            <button class="btn-generate-report" data-username="${username}">Generate Report</button>
+            <div class="report-availability" aria-live="polite">Checking report availability...</div>
         </div>
     `;
 
-    container.querySelector('.btn-generate-report').addEventListener('click', () => {
+    const reportCard = container.querySelector('[data-report-option]');
+    const isReachable = await checkApiReachability();
+
+    // The search result may have been replaced while the health check was running.
+    if (!reportCard || !reportCard.isConnected) return;
+
+    const availability = reportCard.querySelector('.report-availability');
+    if (!availability) return;
+    if (!isReachable) {
+        availability.textContent = 'Report generation is temporarily unavailable. The API service is currently unreachable.';
+        return;
+    }
+
+    availability.remove();
+    const generateButton = document.createElement('button');
+    generateButton.className = 'btn-generate-report';
+    generateButton.dataset.username = username;
+    generateButton.textContent = 'Generate Report';
+    reportCard.appendChild(generateButton);
+    generateButton.addEventListener('click', () => {
         window.ReportGenerator.generate(username);
     });
 }
