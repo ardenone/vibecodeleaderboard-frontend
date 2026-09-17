@@ -126,6 +126,14 @@ secrets.
 
 ### One-time prerequisites
 
+Status (verified 2026-09-17): the Pages project, all three custom domains,
+the Argo deploy wiring, and a live production deployment are in place — see
+[`docs/notes/production-hosting.md`](docs/notes/production-hosting.md) for
+the verified state and deployment targets. The only outstanding item is the
+DNS cutover at the Spaceship registrar (zone move into Cloudflare plus
+nameserver change), which requires operator access no agent credential
+covers.
+
 Before the first production push, the following must exist:
 
 - **Argo wiring:** `declarative-config` must contain the Forgejo webhook route

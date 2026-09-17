@@ -53,6 +53,25 @@ Net: the frontend's actual code (rendering, search, filtering, SSE report UX, OG
 scaffolding) is real and reviewed-quality — the entire gap is in what serves it and feeds
 it. That gap, and specifically the CI/CD path, is the subject of ADR-001 below.
 
+### Hosting status update (2026-09-17)
+
+The "Nothing is live" bullet above is superseded on the hosting side. Verified
+against the live Cloudflare account and DNS on 2026-09-17 (full detail and the
+operator DNS-cutover runbook in
+[`docs/notes/production-hosting.md`](../notes/production-hosting.md)):
+
+- Cloudflare Pages project `vibecodeleaderboard-frontend` exists with a live
+  production deployment; static assets and the ADR-003 host-gated Functions
+  both serve on `vibecodeleaderboard-frontend.pages.dev`.
+- `vibecodeleaderboard.com`, `www`, and `api.` are attached as custom domains,
+  all `pending` on DNS validation.
+- The ADR-001 Argo wiring (github-webhooks eventsource + `website-build`
+  sensor template) is present in `declarative-config`.
+- Remaining gap: the zone is still delegated to Spaceship nameservers with no
+  records, and the zone is not in the Cloudflare account. Moving it requires
+  registrar access no agent credential covers — an explicit operator step
+  (preserve the Spaceship mail MX/SPF records when migrating).
+
 ## ADR-001: 2026-07-20 — Deploy via the fleet's Argo Workflows `website-build` template, not GitHub Actions
 
 ### Context
