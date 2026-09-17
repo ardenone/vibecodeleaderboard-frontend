@@ -172,3 +172,59 @@ automating a guaranteed-failure adds noise, not safety.
   in the deploy path needs to change when it is switched on.
 - Committed `leaderboard.json` history can only move forward in `generated_at` — the
   regression guard makes stale re-commits a no-op rather than a silent downgrade.
+
+## ADR-003: 2026-09-17 — Replace the offline backend with this repo's Pages Functions
+
+### Context
+
+The paired backend (`vibecodeleaderboard-backend`, the `claude-leaderboard` namespace on
+apexalgo-iad — see the audited status above) is not coming back: it was deliberately
+superseded, its namespace is empty, and it never implemented the `/report/*` SSE endpoints
+the frontend's report feature requires (only `/health` and `/user/{username}` existed).
+Meanwhile `js/config.js` (ADR-pinned as the single source of truth) derives the API origin
+as `https://api.<frontend-hostname>`, so the replacement must answer at root paths on
+`api.vibecodeleaderboard.com`. Restoring DNS + ingress + a cluster service for a dead
+codebase was not a meaningful option.
+
+### Decision
+
+Implement the documented contract (`docs/notes/report-sse-api-contract.md`) as Cloudflare
+Pages Functions in `functions/`, served by the **same Pages project** as the static site:
+
+- **ADR-001's deploy path is reused unchanged** — one project, one pipeline, no new
+  infrastructure. Attaching `api.vibecodeleaderboard.com` as a second custom domain of the
+  Pages project is the only platform-side step.
+- **Hostname gate, not path prefix:** functions at root paths check the request host;
+  `api.*` (and localhost variants for `wrangler pages dev`) get API behavior, everything
+  else falls through to `context.next()` — static serving stays byte-for-byte identical
+  and a broken function cannot take down the site.
+- Endpoints: `/health`, `/leaderboard.json` (proxies the baked asset so
+  `scripts/refresh-leaderboard.sh` works), `/user/{username}`, `POST + GET
+  /report/{username}`, and `GET /report/{username}/stream` (SSE with the contract's named
+  events, single-line JSON, heartbeat, terminal-event termination).
+- Report generation runs under `context.waitUntil` (survives client disconnects) with a
+  per-isolate job registry; completed reports are cached (memory, plus the optional
+  `REPORT_CACHE` KV binding for cross-isolate durability, 6h TTL) so retries replay
+  `complete` instead of rescanning. Errors are never cached.
+- GitHub scans stay inside the Pages free-plan subrequest budget (≤20 repos, ≤2 commit
+  pages each) with an optional `GITHUB_TOKEN` secret. **Degraded mode:** when rate-limited
+  without a token, leaderboard users get a snapshot-derived report
+  (`source: "leaderboard-snapshot"`); others get a terminal `error` event.
+
+Alternatives rejected: restoring the in-cluster Python service (dead codebase, never had
+the endpoints, new DNS/ingress/CORS surface for zero feature gain); a separate Worker
+(second deploy pipeline and artifact to wire up); a same-origin `/api/*` prefix (breaks the
+frozen `js/config.js` contract and muddies static/API routing).
+
+### Consequences
+
+- Server-side behavior is pinned by `functions/test-api.js` (runtime-free, mocked
+  ASSETS/fetch), which `make test` and `scripts/definition-of-done.sh` run alongside the
+  existing suites.
+- Without `REPORT_CACHE`, caching is per-isolate only — replay of a cached report may miss
+  depending on which isolate serves the retry. Acceptable (worst case is a rescan), and
+  fixed by binding the namespace.
+- Without `GITHUB_TOKEN`, unauthenticated GitHub calls from shared Cloudflare egress IPs
+  are usually rate-limited, degrading most report requests to snapshot or error paths.
+- Production reachability depends on the `api.` custom domain being attached (tracked in
+  the hosting/domain bead), and on ADR-001's webhook → `website-build` path being live.

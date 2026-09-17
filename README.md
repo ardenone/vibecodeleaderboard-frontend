@@ -71,6 +71,15 @@ uses `http://localhost:8080` when the page is served from `localhost`,
 `https://api.vibecodeleaderboard.com`). The leaderboard data itself is still
 loaded from the frontend's same-origin `leaderboard.json`.
 
+The API is served by this repository's Cloudflare Pages Functions (see
+[`functions/README.md`](functions/README.md) and ADR-003 in
+[`docs/plan/plan.md`](docs/plan/plan.md)) from the same Pages project as the
+static site: attach `api.vibecodeleaderboard.com` as a custom domain of the
+Pages project and the documented endpoints are live, with CORS already
+allowing both frontend origins (plus the local development origins). On the
+site hostnames (`vibecodeleaderboard.com`, `www`) the API paths fall through
+to static serving, so the site's behavior is unchanged.
+
 Do not edit `js/app.js`, `js/report.js`, or `js/profile.js` to change the API
 origin. If a different local backend origin is required, update the one value
 in `js/config.js` and make the backend's CORS allowlist match it.
@@ -82,22 +91,19 @@ profile fallbacks go directly from the browser to the configured API origin;
 the `_redirects` file only handles Pages profile/page routing and does not proxy
 `/health`, `/report/*`, or `/user/*`.
 
-For a local frontend on port 3000, the backend must allow the exact origin
-`http://localhost:3000`. If using Wrangler, allow `http://localhost:8788` as
-well. If the frontend is opened through a loopback address, allow the matching
-`http://127.0.0.1:<port>` origin too. The API must allow the methods used by
-the clients (`GET`, `HEAD`, and `POST`) and the `Content-Type` request header.
-The report stream is cross-origin SSE, so its response also needs the matching
-`Access-Control-Allow-Origin` header and a proxy that forwards the stream
-without buffering or an overly short idle timeout.
+For local development against the Pages Functions API, run `wrangler pages dev .`
+and point `js/config.js` at `http://localhost:8788` — the functions answer the
+API paths there and their CORS allowlist already includes that origin. A local
+frontend on port 3000 is likewise allowlisted. The API allows the methods used
+by the clients (`GET`, `HEAD`, and `POST`) and the `Content-Type` request
+header, and answers `OPTIONS` preflight (the report POST sends
+`Content-Type: application/json`, which triggers one).
 
 If a host-specific reverse proxy is introduced, point `js/config.js` at that
 proxy origin and ensure it forwards `/health`, `/report/*` (including the SSE
-stream), and `/user/*` to the backend. A proxy does not remove the need to
-configure CORS unless the browser request becomes same-origin.
-
-Production CORS should allow both `https://vibecodeleaderboard.com` and
-`https://www.vibecodeleaderboard.com` when both frontend domains are enabled.
+stream), and `/user/*` to the backend without buffering. A proxy does not
+remove the need to configure CORS unless the browser request becomes
+same-origin.
 
 ## Deployment
 
@@ -139,12 +145,16 @@ Before the first production push, the following must exist:
   `www.vibecodeleaderboard.com` as Pages custom domains, and publish the
   Cloudflare-provided Pages records. Wait for HTTPS certificates before calling
   the site production-ready.
-- **API DNS and service:** If report generation and live profile lookups are
-  part of the launch, `api.vibecodeleaderboard.com` must resolve to the
-  production backend ingress and have a valid TLS certificate. The backend must
-  serve the documented report/health endpoints and allow CORS from both
-  frontend origins. The static leaderboard still renders without the API, but
-  API-backed features do not.
+- **API DNS and service:** The API is served by this repository's Pages
+  Functions (ADR-003). Attach `api.vibecodeleaderboard.com` as an additional
+  custom domain of the same `vibecodeleaderboard-frontend` Pages project — the
+  functions then serve `/health`, `/user/*`, `/report/*`, and
+  `/leaderboard.json` on that hostname with CORS pre-configured for both
+  frontend origins. Optionally bind the `GITHUB_TOKEN` secret and the
+  `REPORT_CACHE` KV namespace to the project (see
+  [`functions/README.md`](functions/README.md)) for reliable report scans and a
+  durable report cache. The static leaderboard still renders without the API,
+  but API-backed features do not.
 - **Production data:** Review `leaderboard.json` before launch. It is shipped
   unchanged because this site has no build step; Argo does not fetch or replace
   it during deployment.
@@ -176,9 +186,10 @@ Argo-managed resources directly with `kubectl`.
 The frontend derives its production API URL from the browser hostname:
 `https://api.<frontend-hostname>`. Therefore the expected production hosts are
 `https://vibecodeleaderboard.com` or `https://www.vibecodeleaderboard.com` for
-the site and `https://api.vibecodeleaderboard.com` for the API. Keep those DNS,
-TLS, backend-ingress, and CORS settings aligned; there is no deployment-time
-API URL secret to update.
+the site and `https://api.vibecodeleaderboard.com` for the API — both served
+by the same Pages project (site as static assets, API as Pages Functions on
+the `api.` custom domain). Keep those DNS and TLS settings aligned; there is
+no deployment-time API URL secret to update.
 
 After a deployment, run `make smoke-production` to check the production site,
 `leaderboard.json`, API reachability, and the report SSE lifecycle. The check

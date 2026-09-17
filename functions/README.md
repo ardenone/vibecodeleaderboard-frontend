@@ -1,6 +1,73 @@
 # Cloudflare Pages Functions
 
-This directory contains Cloudflare Pages Functions that enable server-side processing for the Vibe Code Leaderboard site.
+This directory contains Cloudflare Pages Functions that enable server-side processing for the Vibe Code Leaderboard site: the API surface (backend replacement, see ADR-003 in `docs/plan/plan.md`) and server-side OG tag injection.
+
+## API Functions (backend replacement)
+
+The paired backend service (`vibecodeleaderboard-backend`, formerly the `claude-leaderboard` deployment) is gone, and it never implemented the report/SSE endpoints anyway. The API is now served by Pages Functions from this same project, implementing the contract documented in [`docs/notes/report-sse-api-contract.md`](../docs/notes/report-sse-api-contract.md):
+
+| Endpoint | Method | File | Purpose |
+|---|---|---|---|
+| `/health` | HEAD, GET | `health.js` | reachability pre-check (instant, touches nothing) |
+| `/leaderboard.json` | GET | `leaderboard.json.js` | leaderboard payload from the API origin (used by `scripts/refresh-leaderboard.sh`) |
+| `/user/{username}` | GET, HEAD | `user/[username].js` | profile fallback lookup from the baked-in leaderboard |
+| `/report/{username}` | POST, GET | `report/[username].js` | trigger generation (202) / fetch cached report |
+| `/report/{username}/stream` | GET (SSE) | `report/[username]/stream.js` | live progress + terminal `complete`/`error` |
+
+Shared logic lives in `_lib/` — never routed, because `_routes.json` lists the routed paths explicitly:
+
+- `_lib/api.js` — hostname gate, method/CORS/error wrapper, username validation
+- `_lib/cors.js` — cross-origin allowlist and preflight handling
+- `_lib/sse.js` — SSE writer (single-line JSON frames) + heartbeat
+- `_lib/leaderboard.js` — baked-in `leaderboard.json` access, `/user` payload shape, rank/percentile math
+- `_lib/github.js` — GitHub client, AI-tool signature detection, the repo scan
+- `_lib/jobs.js` — per-username job registry, memory + optional KV report cache
+
+### Hostname gate
+
+`js/config.js` derives the API origin as `https://api.<frontend-hostname>`, so the API functions live at root paths and decide per request whether they are answering an API hostname:
+
+- `api.*` hostnames → API behavior. **`api.vibecodeleaderboard.com` must be attached as a custom domain of this Pages project** (same project as the site — one deployment serves both).
+- `localhost` / `127.0.0.1` / `[::1]` → API behavior, so `wrangler pages dev .` exercises the endpoints at `http://localhost:8788/health` etc.
+- anything else (apex, `www`, `*.pages.dev` previews) → `context.next()` — static serving, byte-for-byte identical to a deployment without these functions. A broken function can never take down the site's static paths.
+
+### CORS
+
+The API is cross-origin from both frontend origins, so every API response carries CORS headers and `OPTIONS` preflight is answered (the report POST sends `Content-Type: application/json`, which is not CORS-safelisted). The allowlist defaults to `https://vibecodeleaderboard.com`, `https://www.vibecodeleaderboard.com`, and the local dev origins (`localhost:3000`, `localhost:8788` and their `127.0.0.1` variants); set the `ALLOWED_ORIGINS` environment variable (comma-separated) to replace the list.
+
+### Bindings (Pages project settings)
+
+| Binding | Kind | Required | Purpose |
+|---|---|---|---|
+| `GITHUB_TOKEN` | secret | recommended | GitHub API token for report scans. Without it, unauthenticated calls from shared Cloudflare egress IPs are usually rate-limited immediately; the API then falls back to the degraded mode below. Provision with `wrangler pages secret put GITHUB_TOKEN` or the dashboard — never commit the value. |
+| `REPORT_CACHE` | KV namespace | optional | durable report cache shared across isolates (6h TTL). Without it the cache is per-isolate memory only. |
+| `ALLOWED_ORIGINS` | plain text | optional | replaces the CORS origin allowlist |
+
+### Report generation behavior
+
+- The scan runs under `context.waitUntil`, so **generation survives client disconnects**, and completed reports are **cached** so a retry replays the terminal `complete` instead of rescanning (both are contract requirements). Failed jobs are never cached — a retry rescans.
+- Scan budgets: at most 20 non-fork repos (most recently pushed first), at most 2 pages × 100 commits per repo — staying inside the 50-subrequest free-plan limit.
+- Tool attribution matches commit-message signatures (`Co-Authored-By: …`, `Generated with …`, vendor domains) for the six documented tool keys; a commit can count for several tools.
+- **Degraded mode:** when the GitHub API is rate-limited and no token is bound, a user who is on the baked-in leaderboard gets a report assembled from the leaderboard snapshot (`"source": "leaderboard-snapshot"`); anyone else gets a terminal `error` event.
+- Rank/percentile for off-leaderboard users is computed against the baked-in leaderboard (where their scan count would place them); users already on the board keep their published rank so the report and the table never disagree.
+
+### Testing
+
+Runtime-free unit/contract tests with mocked ASSETS and GitHub fetch:
+
+```bash
+node functions/test-api.js    # or: make test
+```
+
+`make test` runs these alongside the OG-injection and report-SSE client contract suites; `scripts/definition-of-done.sh` includes them in the pre-push gate.
+
+For a live local check with the real Pages runtime:
+
+```bash
+wrangler pages dev .
+curl -s http://localhost:8788/health
+curl -N http://localhost:8788/report/<username>/stream
+```
 
 ## User Profile Function (`u/[username].js`)
 
@@ -69,8 +136,9 @@ node functions/test-og-injection.js
 ```
 
 `make test` runs these plus the report SSE contract tests
-(`tests/report-sse-contract.test.js`), which pin the API contract documented in
-`docs/notes/report-sse-api-contract.md`.
+(`tests/report-sse-contract.test.js`, pinning the client side of the API
+contract documented in `docs/notes/report-sse-api-contract.md`) and the API
+functions suite (`functions/test-api.js`, pinning the server side).
 
 For an end-to-end Pages runtime test, use Wrangler:
 

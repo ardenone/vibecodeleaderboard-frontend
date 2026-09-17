@@ -42,6 +42,12 @@ fi
 if [ "$OG_RC" -eq 0 ]; then pass "og-injection tests"; else fail "og-injection tests"; sed 's/^/       /' "$TMP/og.log"; fi
 
 # ---------------------------------------------------------------------------
+# 1b. API functions test suite (the backend-replacement endpoints).
+API_RC=0
+node functions/test-api.js >"$TMP/api.log" 2>&1 || API_RC=$?
+if [ "$API_RC" -eq 0 ]; then pass "api-functions tests"; else fail "api-functions tests"; sed 's/^/       /' "$TMP/api.log"; fi
+
+# ---------------------------------------------------------------------------
 # 2. Fixtures: fresh timestamp is generated at test time so the freshness
 #    assertions never age out; the stale fixture uses a fixed past date.
 NOW_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"

@@ -6,10 +6,14 @@ side: every field, ordering rule, and failure path below is what the shipped cli
 actually consumes, not an aspiration. The backend should treat this as its implementation
 spec.
 
-**Status:** the `/report/*` SSE endpoints are **not yet implemented** in the backend repo
-(`vibecodeleaderboard-backend`); `/health` and `/user/{username}` are implemented in its
-`src/user_api.py` and match what is documented here. Until the report endpoints exist,
-every report request terminates at the reachability check documented below.
+**Status:** the backend repo (`vibecodeleaderboard-backend`) is gone and never implemented
+the `/report/*` SSE endpoints. All four endpoints in this contract are now implemented
+server-side by this repository's Cloudflare Pages Functions (`functions/` — see
+[`functions/README.md`](../../functions/README.md) and ADR-003 in
+[`docs/plan/plan.md`](../plan/plan.md)), served from `api.vibecodeleaderboard.com` once
+that hostname is attached as a custom domain of the Pages project. The server-side
+behavior is pinned by `functions/test-api.js`; the client side by
+`tests/report-sse-contract.test.js`.
 
 ## Base URL resolution
 
