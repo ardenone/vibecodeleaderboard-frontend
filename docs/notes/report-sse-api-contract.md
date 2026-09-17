@@ -211,7 +211,7 @@ truth. A future REST `GET /report/{username}` should return this same shape.)
 | `top_repos` | array | no | see below; "No repos found" if empty/absent |
 | `top_repos[].repo` | string | yes (within array) | repo name |
 | `top_repos[].commits` | number | yes (within array) | "N commits" |
-| `top_repos[].tools` | **array of tool names** | no | icon strip |
+| `top_repos[].tools` | **array of tool names** | **yes (within array)** | icon strip; an entry *without* `tools` throws and freezes the modal (see [Known client-side gaps](#known-client-side-gaps-documented-not-specd)) — `tools: []` is the correct empty value |
 | `first_ai_commit` | ISO 8601 timestamp | no | "First AI Commit" section; section omitted entirely if absent |
 
 \* marked fields are read unconditionally — absent values render as the listed defaults
@@ -276,3 +276,12 @@ Recorded so nobody mistakes them for server obligations:
   `data.index … data.total - 1` *in addition to* the scanning row itself, so the first
   repo's scan momentarily shows one extra placeholder row. Cosmetic; `index` is still
   0-based and `total` is the repo count.
+* A `top_repos[]` entry **without** a `tools` field throws
+  (`TypeError: (repo.tools || {}).map is not a function` — the `{}` fallback is
+  map-less, unlike the `scanned` event's `Object.entries(data.tools || {})`), so
+  `showReport` aborts before assigning `innerHTML`: the stream is already closed and
+  the modal freezes on the last progress frame. This is why `top_repos[].tools` is
+  marked required above; use `[]`, not an absent field, for "no tools".
+* `by_tool` percentages divide by the raw `total_commits` field, not the defaulted
+  one — `by_tool` present without `total_commits` renders bars labelled
+  `N (NaN%)` with `width: NaN%`. Always send `total_commits` alongside `by_tool`.

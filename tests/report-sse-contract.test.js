@@ -350,6 +350,45 @@ test('complete with absent optionals renders the documented defaults', async () 
   assert.doesNotMatch(html, /First AI Commit/);
 });
 
+test('complete: a top_repos entry without tools throws — tools is required within the array', async () => {
+  const es = await startGeneration();
+  const before = dom.reportContent.innerHTML;
+  // (repo.tools || {}).map is not a function: the {} fallback has no .map, so
+  // showReport aborts before assigning innerHTML. The server must send tools
+  // in every top_repos entry — [] for "no tools", never an absent field.
+  assert.throws(
+    () => es.emit('complete', {
+      username: 'u', rank: 1, total_commits: 10,
+      top_repos: [{ repo: 'u/repo', commits: 1 }], // no tools field
+    }),
+    /map is not a function/,
+  );
+  assert.equal(es.closed, true, 'close() already ran — the freeze happens at render time');
+  assert.equal(dom.reportContent.innerHTML, before, 'the report never renders: modal keeps the stale progress frame');
+});
+
+test('complete: an empty tools array is the documented no-tools value and renders safely', async () => {
+  const es = await startGeneration();
+  es.emit('complete', {
+    username: 'u', rank: 1, total_commits: 10,
+    top_repos: [{ repo: 'u/repo', commits: 1, tools: [] }],
+  });
+  const html = dom.reportContent.innerHTML;
+  assert.match(html, /u\/repo/);
+  assert.match(html, /1 commits/);
+});
+
+test('complete: by_tool without total_commits renders NaN percentages — send them together', async () => {
+  const es = await startGeneration();
+  // by_tool percentages divide by the raw total_commits, not the defaulted
+  // one: absent total_commits yields "N (NaN%)" bars. Pinning the failure so
+  // the "always send total_commits with by_tool" rule in the doc is enforced.
+  es.emit('complete', { username: 'u', rank: 1, by_tool: { claude: 5 } });
+  const html = dom.reportContent.innerHTML;
+  assert.match(html, /5 \(NaN%\)/);
+  assert.match(html, /width: NaN%/);
+});
+
 // --- Framing -----------------------------------------------------------------
 
 test('default message events are ignored: only named events drive the UI', async () => {
