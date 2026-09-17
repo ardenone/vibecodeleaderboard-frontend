@@ -180,6 +180,12 @@ the site and `https://api.vibecodeleaderboard.com` for the API. Keep those DNS,
 TLS, backend-ingress, and CORS settings aligned; there is no deployment-time
 API URL secret to update.
 
+After a deployment, run `make smoke-production` to check the production site,
+`leaderboard.json`, API reachability, and the report SSE lifecycle. The check
+uses `octocat` by default; set `SMOKE_USERNAME` to a known cached user when
+needed. See [`docs/notes/production-smoke-tests.md`](docs/notes/production-smoke-tests.md)
+for the full contract and preview/staging overrides.
+
 ### Other Static Hosts
 
 The site can be hosted on any static hosting service:
