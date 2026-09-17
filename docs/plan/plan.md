@@ -129,3 +129,46 @@ performed ad hoc.
   quality sign-off.
 - Without a live `api.vibecodeleaderboard.com`, the static leaderboard still renders but
   report generation and live profile fallbacks are unavailable.
+
+## ADR-002: 2026-09-17 — Leaderboard refresh runs as a standalone safe script, not at deploy time
+
+### Context
+
+The removed GitHub Actions deploy workflow contained the only leaderboard refresh logic
+this repo ever had: `curl -fsSL https://api.vibecodeleaderboard.com/leaderboard.json -o
+leaderboard.json || echo warning`. That is unsafe in every failure direction: it accepts
+stale payloads, proxy error pages, and schema changes that would blank the site, and its
+only guard is curl's own exit code. ADR-001 dropped the step entirely rather than carry it
+into the Argo deploy path while the backend is offline, leaving the repo with no refresh
+or validation tooling at all.
+
+### Decision
+
+Implement the refresh as a standalone, unattended-safe shell workflow in `scripts/`
+(`validate-leaderboard.sh`, `refresh-leaderboard.sh`), documented in
+`docs/notes/leaderboard-refresh.md`:
+
+- Fetch, validate schema + freshness, and check for regression **before** touching
+  `leaderboard.json`; every failure path leaves it byte-for-byte untouched, so the
+  baked-in fallback always survives a dead or lying API.
+- Install atomically (stage + rename in the target directory) so readers never see a
+  partial file.
+- Validation is also usable standalone: `scripts/validate-leaderboard.sh
+  --skip-freshness leaderboard.json` is the pre-push gate for any change touching the
+  data file (the committed fixture is schema-valid but intentionally stale).
+- `scripts/definition-of-done.sh` runs the OG-injection suite plus self-tests for both
+  scripts, including live refresh runs against a throwaway local HTTP server covering
+  success, no-op regression, and fallback preservation.
+
+Activation when the backend returns: a scheduled runner commits refreshed data to `main`
+and the existing `website-build` push hook deploys it. Deploy-time refresh stays rejected
+(a deploy must not depend on API health). It is deliberately not scheduled yet: while the
+backend is offline every run correctly takes the fallback path and changes nothing, and
+automating a guaranteed-failure adds noise, not safety.
+
+### Consequences
+
+- The refresh can be run by hand, cron, or agent with identical safety properties; nothing
+  in the deploy path needs to change when it is switched on.
+- Committed `leaderboard.json` history can only move forward in `generated_at` — the
+  regression guard makes stale re-commits a no-op rather than a silent downgrade.

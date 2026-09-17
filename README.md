@@ -224,6 +224,17 @@ The leaderboard data is a JSON file with the following structure:
 }
 ```
 
+## Leaderboard Data Refresh
+
+`leaderboard.json` is refreshed from the backend by
+`scripts/refresh-leaderboard.sh`, which fetches the payload, validates schema
+and freshness, refuses to regress to older data, and only then atomically
+replaces the file — every failure path (API unreachable, bad JSON, schema
+violation, stale data) leaves the existing file byte-for-byte untouched, so
+the site always has a safe baked-in fallback. Standalone schema checks:
+`scripts/validate-leaderboard.sh`. Full process, data contract, and failure
+behavior: [`docs/notes/leaderboard-refresh.md`](docs/notes/leaderboard-refresh.md).
+
 ## API Contract
 
 The frontend expects the backend API to provide these endpoints. The full,
