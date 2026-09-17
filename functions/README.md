@@ -61,11 +61,16 @@ Twitter's image tag at this endpoint; unknown users retain the static PNG fallba
 
 ## Automated testing
 
-Run the metadata tests with Node's ESM mode:
+Run the metadata tests with Node (22.7+ auto-detects ESM; the old
+`--experimental-default-type=module` flag was removed in Node 24):
 
 ```bash
-node --experimental-default-type=module functions/test-og-injection.js
+node functions/test-og-injection.js
 ```
+
+`make test` runs these plus the report SSE contract tests
+(`tests/report-sse-contract.test.js`), which pin the API contract documented in
+`docs/notes/report-sse-api-contract.md`.
 
 For an end-to-end Pages runtime test, use Wrangler:
 

@@ -226,7 +226,13 @@ The leaderboard data is a JSON file with the following structure:
 
 ## API Contract
 
-The frontend expects the backend API to provide these endpoints:
+The frontend expects the backend API to provide these endpoints. The full,
+normative contract — SSE event payloads, event ordering, terminal success and
+failure states, HTTP error responses, reconnect and timeout behavior, and the
+completed report response — is documented in
+[`docs/notes/report-sse-api-contract.md`](docs/notes/report-sse-api-contract.md)
+and pinned by the contract tests in `tests/report-sse-contract.test.js`
+(run them with `make test`):
 
 ### GET /leaderboard.json
 
