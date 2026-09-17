@@ -38,7 +38,7 @@ The site includes `leaderboard.json` at build time for instant rendering. The AP
 
 1. Clone the repo:
    ```bash
-   git clone https://github.com/ardenone/vibecodeleaderboard-frontend.git
+   git clone https://git.ardenone.com/jedarden/vibecodeleaderboard-frontend.git
    cd vibecodeleaderboard-frontend
    ```
 
@@ -66,26 +66,84 @@ const API_BASE = 'http://localhost:8080';  // Your local API server
 
 ## Deployment
 
-### Cloudflare Pages (Recommended)
+Deployment is Forgejo-primary and GitOps-managed. The production path is:
 
-The site is automatically deployed to Cloudflare Pages via GitHub Actions when pushing to `main`.
-
-Required GitHub repository secrets:
-- `CLOUDFLARE_API_TOKEN` - Cloudflare API token with Pages edit permissions
-- `CLOUDFLARE_ACCOUNT_ID` - Your Cloudflare account ID
-
-To deploy manually:
-
-```bash
-# Install Wrangler
-npm install -g wrangler
-
-# Login to Cloudflare
-wrangler login
-
-# Deploy
-wrangler pages deploy . --project-name=vibecodeleaderboard-frontend
+```text
+Forgejo push to main
+    -> Forgejo webhook
+    -> Argo Events / Argo Workflows in iad-ci
+    -> website-build WorkflowTemplate
+    -> Cloudflare Pages project
 ```
+
+The source-of-truth repository is
+[`git.ardenone.com/jedarden/vibecodeleaderboard-frontend`](https://git.ardenone.com/jedarden/vibecodeleaderboard-frontend).
+GitHub repositories are mirrors for discovery and must not be treated as the
+authoritative checkout or deployment target. This repository has no GitHub
+Actions deployment workflow and does not require repository-level Cloudflare
+secrets.
+
+### One-time prerequisites
+
+Before the first production push, the following must exist:
+
+- **Argo wiring:** `declarative-config` must contain the Forgejo webhook route
+  and a `website-build` sensor trigger for `jedarden/vibecodeleaderboard-frontend`
+  on `main`. The trigger uses `build-command: true`, `output-dir: .`, and
+  `cf-project: vibecodeleaderboard-frontend`.
+- **Cloudflare Pages project:** Create a Pages project named exactly
+  `vibecodeleaderboard-frontend`. The Argo template deploys the repository root
+  as-is, including Pages Functions, `_redirects`, and `_routes.json`.
+- **Central deployment credential:** The `cloudflare-pages-secret`
+  `ExternalSecret` in the `iad-ci` Argo Workflows configuration must be
+  healthy. The Pages API credential belongs in the cluster's central secret
+  store; never add it to Forgejo, a GitHub mirror, this repository, or a local
+  `.env` file.
+- **Frontend DNS:** Put the `vibecodeleaderboard.com` DNS zone under the DNS
+  provider used for the Pages project, attach both the apex domain and
+  `www.vibecodeleaderboard.com` as Pages custom domains, and publish the
+  Cloudflare-provided Pages records. Wait for HTTPS certificates before calling
+  the site production-ready.
+- **API DNS and service:** If report generation and live profile lookups are
+  part of the launch, `api.vibecodeleaderboard.com` must resolve to the
+  production backend ingress and have a valid TLS certificate. The backend must
+  serve the documented report/health endpoints and allow CORS from both
+  frontend origins. The static leaderboard still renders without the API, but
+  API-backed features do not.
+- **Production data:** Review `leaderboard.json` before launch. It is shipped
+  unchanged because this site has no build step; Argo does not fetch or replace
+  it during deployment.
+
+### Normal release
+
+1. Make and test the change locally.
+2. Commit to `main` and push to the Forgejo `origin`:
+
+   ```bash
+   git push origin main
+   ```
+
+3. The authenticated Forgejo webhook submits an Argo Workflow in `iad-ci`.
+   The workflow clones the Forgejo repository, runs the configured build
+   command (`true` for this static site), and deploys `.` to the named Pages
+   project.
+4. Verify the Argo Workflow completed successfully, then check the Pages
+   deployment and the production custom domain.
+
+Changes to webhook routes, sensors, WorkflowTemplates, ExternalSecrets, or
+other cluster configuration belong in
+[`declarative-config`](https://git.ardenone.com/jedarden/declarative-config).
+Commit and push those manifests and let ArgoCD reconcile them; do not apply
+Argo-managed resources directly with `kubectl`.
+
+### Production hostname configuration
+
+The frontend derives its production API URL from the browser hostname:
+`https://api.<frontend-hostname>`. Therefore the expected production hosts are
+`https://vibecodeleaderboard.com` or `https://www.vibecodeleaderboard.com` for
+the site and `https://api.vibecodeleaderboard.com` for the API. Keep those DNS,
+TLS, backend-ingress, and CORS settings aligned; there is no deployment-time
+API URL secret to update.
 
 ### Other Static Hosts
 

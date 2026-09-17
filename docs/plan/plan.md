@@ -26,13 +26,12 @@ apexalgo-iad, Forgejo API) rather than assumed from the repo name:
 - **Nothing is live.** `vibecodeleaderboard.com` has no A/AAAA record at all (only NS
   records at Spaceship and MX records for mail) — `www` and `api` subdomains return
   NXDOMAIN. There is no Cloudflare Pages `*.pages.dev` deployment either.
-- **The only deploy pipeline (`.github/workflows/deploy.yml`, GitHub Actions → Cloudflare
-  Pages) has failed on both of its two runs ever** (2026-07-06 and 2026-07-07): missing
-  `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` repo secrets (`Input required and not
-  supplied: apiToken`), and its optional "refresh leaderboard.json from the API" step also
-  fails because `api.vibecodeleaderboard.com` doesn't resolve. This also means GitHub
-  Actions is still enabled and firing on this repo, contrary to fleet policy (GH Actions are
-  supposed to be disabled everywhere; Argo Workflows is the CI/CD system of record).
+- **The only deploy pipeline at the time (`.github/workflows/deploy.yml`, GitHub Actions →
+  Cloudflare Pages) failed on both of its two runs ever** (2026-07-06 and 2026-07-07):
+  repository-level Pages credentials were missing, and its optional "refresh
+  leaderboard.json from the API" step also failed because `api.vibecodeleaderboard.com`
+  did not resolve. This historical workflow has since been removed; the active path is the
+  Forgejo-to-Argo process documented in ADR-001 below.
 - **The backend is offline.** The paired private repo `ardenone/vibecodeleaderboard-backend`
   deploys as the `claude-leaderboard` namespace on `apexalgo-iad`
   (`cluster-configuration/apexalgo-iad/claude-leaderboard/` per its README). Read-only
@@ -59,50 +58,42 @@ it. That gap, and specifically the CI/CD path, is the subject of ADR-001 below.
 
 This repo ships a purely static site with zero build step. It needs exactly one thing to go
 live: push the contents of the repo root to a Cloudflare Pages project on every merge to
-`main`. It currently tries to do this with a GitHub Actions workflow
-(`.github/workflows/deploy.yml`, `cloudflare/pages-action@v1`) that has never once succeeded
-— `CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` secrets were never configured on either the
-`ardenone/vibecodeleaderboard-frontend` or `jedarden/vibecodeleaderboard-frontend` GitHub
-repos, so both runs failed at the deploy step.
+`main`. The source of truth is the Forgejo repository
+`git.ardenone.com/jedarden/vibecodeleaderboard-frontend`; GitHub is a read-only push mirror.
 
-Separately, this workspace has a fleet-wide, explicit policy: **GitHub Actions are disabled
-across all repos; Argo Workflows (running in the `iad-ci` cluster) is the CI/CD system of
-record.** This repo currently violates that policy — it is the only repo found during this
-audit still running live (if failing) GitHub Actions workflows on every push.
-
-This is not a green-field decision. `declarative-config` already has a working, generic
-`website-build` `WorkflowTemplate` (`k8s/iad-ci/argo-workflows/website-build-workflowtemplate.yml`)
-plus a matching Argo Events `Sensor`
-(`k8s/iad-ci/argo-events/website-build-sensor.yml`) that together clone a repo, run an
-arbitrary build command, and `wrangler pages deploy` the output — triggered by a GitHub push
-webhook, no polling, no repo-local Actions config. Seven static sites already deploy this
-way, including at least one (`artifacts.hardyrekshin.com`) with the exact same shape as this
-repo: no build step at all (`build-command: "true"`), just a directory of static files.
+The fleet's CI/CD system of record is Argo Workflows in the `iad-ci` cluster. The old
+repo-local GitHub Actions deployment was removed. `declarative-config` provides the generic
+`website-build` `WorkflowTemplate`
+(`k8s/iad-ci/argo-workflows/website-build-workflowtemplate.yml`) plus the Argo Events
+configuration that receives Forgejo push webhooks and submits it. The template clones from
+Forgejo, runs an arbitrary build command, and deploys the output with Wrangler. Static sites
+use `build-command: "true"` and deploy a directory as-is.
 
 ### Decision
 
-Deploy `vibecodeleaderboard-frontend` through the existing `website-build` WorkflowTemplate
-instead of fixing/re-enabling GitHub Actions:
+Deploy `vibecodeleaderboard-frontend` through the existing `website-build` WorkflowTemplate:
 
-- Add a new dependency + trigger to `k8s/iad-ci/argo-events/website-build-sensor.yml` for
-  `vibecodeleaderboard-frontend`, using `build-command: "true"` and `output-dir: "."`
-  (mirroring the `artifacts-hardyrekshin-com-deploy` trigger, the closest existing analog).
-- Create the `vibecodeleaderboard-frontend` Cloudflare Pages project (parallel to the
-  `cf-project` values already used by the other six sites on this template).
-- Delete `.github/workflows/deploy.yml` from this repo and disable GitHub Actions at the
-  repo-settings level on both the `jedarden/...` and `ardenone/...` GitHub mirrors (deleting
-  the workflow file alone does not stop a repo with Actions enabled from re-triggering on
-  future pushes — a known gotcha in this fleet).
-- Do **not** carry over the workflow's "fetch fresh `leaderboard.json` from the API during
-  deploy" step — the API has no DNS and the backend is scaled to zero. Ship the
-  currently-committed `leaderboard.json` as-is (it is test fixture data; replacing it with
-  real or clearly-labeled placeholder data is tracked separately, see beads below) until the
-  data-source decision is made.
+- Add the Forgejo event-source route, webhook ingress route, and sensor dependency/trigger
+  in `declarative-config` for `jedarden/vibecodeleaderboard-frontend` on `main`, using
+  `build-command: "true"`, `output-dir: "."`, and
+  `cf-project: vibecodeleaderboard-frontend`.
+- Create the Cloudflare Pages project named `vibecodeleaderboard-frontend` and attach the
+  `vibecodeleaderboard.com` and `www.vibecodeleaderboard.com` custom domains. The DNS zone
+  must be managed by the provider serving the Pages project, and HTTPS must be issued before
+  production launch.
+- Provision the shared `cloudflare-pages-secret` ExternalSecret in `iad-ci`; the Pages API
+  credential is cluster-managed and must not be copied into this repository or either GitHub
+  mirror.
+- Ensure `api.vibecodeleaderboard.com` resolves to the live backend, has a valid certificate,
+  and permits both frontend origins through CORS before advertising report generation or live
+  profile lookups.
+- Do **not** fetch or replace `leaderboard.json` during deploy. The committed file is the
+  production artifact until the data pipeline publishes a reviewed replacement.
 
 Implementation is cross-repo (this repo + `declarative-config`) and is tracked as beads
-rather than done inline in this audit pass, consistent with this workspace's rule that
-`declarative-config` changes are commit-and-let-ArgoCD-sync, never a live mutation performed
-ad hoc.
+rather than done inline in this documentation pass, consistent with this workspace's rule
+that `declarative-config` changes are commit-and-let-ArgoCD-sync, never a live mutation
+performed ad hoc.
 
 ### Alternatives Considered
 
@@ -128,14 +119,12 @@ ad hoc.
 
 ### Consequences
 
-- Every push to `main` will auto-deploy via Argo (identical mechanism to `jedarden.com` and
-  the six other sites on this template) — no more manual deploys, no more silently-failing
-  Actions runs on every commit.
-- One-time setup cost: a `declarative-config` sensor entry + Cloudflare Pages project
-  creation, plus disabling GitHub Actions on the two GitHub mirrors. Tracked as beads.
-- The site will go live serving synthetic `testuserNNN` data until the placeholder-data bead
-  is resolved — must not be treated as a real public launch until then.
-- The still-dead backend (`api.<hostname>`) means "Generate Report" and the profile page's
-  live-API fallback will fail (or hang) for any visitor as soon as the site is reachable —
-  tracked separately as a graceful-degradation bead so a live-but-broken feature isn't the
-  first thing a real visitor hits.
+- Every push to Forgejo `main` will auto-deploy via Argo once the Forgejo sensor, Pages
+  project, shared credential, and DNS prerequisites are provisioned.
+- GitHub remains a mirror and is not a deployment control plane. There are no per-repository
+  Pages credentials or manual Wrangler deployments in the release path.
+- The site serves the committed `leaderboard.json` until the data pipeline publishes a
+  reviewed production replacement; a successful Pages deployment is not by itself a data
+  quality sign-off.
+- Without a live `api.vibecodeleaderboard.com`, the static leaderboard still renders but
+  report generation and live profile fallbacks are unavailable.
