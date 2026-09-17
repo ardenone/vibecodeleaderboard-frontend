@@ -1,7 +1,3 @@
-// API Configuration
-const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:8080'
-    : `https://api.${window.location.hostname.replace(/^www\./, '')}`;
 const API_REACHABILITY_TIMEOUT_MS = 2000;
 
 // State
@@ -133,7 +129,7 @@ async function checkApiReachability() {
     const timeoutId = setTimeout(() => controller.abort(), API_REACHABILITY_TIMEOUT_MS);
 
     try {
-        const response = await fetch(`${API_BASE}/health`, {
+        const response = await fetch(`${window.VibeCodeConfig.apiBaseUrl}/health`, {
             method: 'HEAD',
             signal: controller.signal
         });

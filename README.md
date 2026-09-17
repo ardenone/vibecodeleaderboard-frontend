@@ -21,6 +21,7 @@ This is a static HTML/CSS/JavaScript site that displays the leaderboard of devel
 Static Site (this repo)
     ├── index.html         - Main leaderboard page
     ├── css/style.css      - Styling
+    ├── js/config.js       - Shared API base URL configuration
     ├── js/app.js          - Leaderboard rendering, search, filtering
     └── js/report.js       - SSE client, report generation UX
 ```
@@ -32,7 +33,7 @@ The site includes `leaderboard.json` at build time for instant rendering. The AP
 ### Prerequisites
 
 - A modern web browser
-- (Optional) Local backend API server
+- (Optional) Local backend API server listening on `http://localhost:8080`
 
 ### Running Locally
 
@@ -45,24 +46,58 @@ The site includes `leaderboard.json` at build time for instant rendering. The AP
 2. Serve the files with any static server:
    ```bash
    # Using Python 3
-   python -m http.server 8080
+   python -m http.server 3000
 
    # Using Node.js
-   npx serve .
-
-   # Or open index.html directly in a browser
+   npx serve . --listen 3000
    ```
 
-3. Open `http://localhost:8080` in your browser
+3. Open `http://localhost:3000` in your browser. Keep the frontend and backend
+   on different ports: the backend API uses `http://localhost:8080`.
+
+   To exercise the Pages Functions locally instead, use Wrangler, which serves
+   the frontend from `http://localhost:8788`:
+
+   ```bash
+   wrangler pages dev .
+   ```
 
 ### API Configuration
 
-By default, the frontend uses the production API at `api.vibecodeleaderboard.com`. For local development with a local backend:
+`js/config.js` is the single source of truth for the browser API base URL. It
+uses `http://localhost:8080` when the page is served from `localhost`,
+`127.0.0.1`, or `[::1]`; otherwise it derives the API origin as
+`https://api.<frontend-hostname>` (so the production frontend uses
+`https://api.vibecodeleaderboard.com`). The leaderboard data itself is still
+loaded from the frontend's same-origin `leaderboard.json`.
 
-```javascript
-// In js/app.js and js/report.js, modify:
-const API_BASE = 'http://localhost:8080';  // Your local API server
-```
+Do not edit `js/app.js`, `js/report.js`, or `js/profile.js` to change the API
+origin. If a different local backend origin is required, update the one value
+in `js/config.js` and make the backend's CORS allowlist match it.
+
+### Local CORS and proxy behavior
+
+The static site has no development proxy. Report generation, health checks, and
+profile fallbacks go directly from the browser to the configured API origin;
+the `_redirects` file only handles Pages profile/page routing and does not proxy
+`/health`, `/report/*`, or `/user/*`.
+
+For a local frontend on port 3000, the backend must allow the exact origin
+`http://localhost:3000`. If using Wrangler, allow `http://localhost:8788` as
+well. If the frontend is opened through a loopback address, allow the matching
+`http://127.0.0.1:<port>` origin too. The API must allow the methods used by
+the clients (`GET`, `HEAD`, and `POST`) and the `Content-Type` request header.
+The report stream is cross-origin SSE, so its response also needs the matching
+`Access-Control-Allow-Origin` header and a proxy that forwards the stream
+without buffering or an overly short idle timeout.
+
+If a host-specific reverse proxy is introduced, point `js/config.js` at that
+proxy origin and ensure it forwards `/health`, `/report/*` (including the SSE
+stream), and `/user/*` to the backend. A proxy does not remove the need to
+configure CORS unless the browser request becomes same-origin.
+
+Production CORS should allow both `https://vibecodeleaderboard.com` and
+`https://www.vibecodeleaderboard.com` when both frontend domains are enabled.
 
 ## Deployment
 

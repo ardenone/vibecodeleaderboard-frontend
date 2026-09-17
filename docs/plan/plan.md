@@ -14,6 +14,7 @@ A public, static HTML/CSS/JS site (no build step, no framework, no `package.json
 - `user.html` + `js/profile.js` + `css/profile.css` — shareable per-user profile page at
   `/u/<username>` (routed via `_redirects`), intended to carry per-user Open Graph tags for
   link unfurls.
+- `js/config.js` — the shared browser API base URL configuration used by the API clients.
 - `js/report.js` — SSE client for an on-demand "generate a report for any GitHub user"
   feature, talking to a backend API at `https://api.<hostname>`.
 - `leaderboard.json` — baked-in leaderboard data, fetched at page load for instant render.

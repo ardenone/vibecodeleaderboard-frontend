@@ -24,7 +24,7 @@ window.ReportGenerator = (function() {
         const timeoutId = setTimeout(() => controller.abort(), 2000);
 
         try {
-            const response = await fetch(`${getApiBaseUrl()}/health`, {
+            const response = await fetch(`${window.VibeCodeConfig.apiBaseUrl}/health`, {
                 method: 'HEAD',
                 signal: controller.signal
             });
@@ -71,7 +71,7 @@ window.ReportGenerator = (function() {
             eventSource.addEventListener('error', handleError);
 
             // Also request the report (triggers generation if not cached)
-            await fetch(`${getApiBaseUrl()}/report/${username}`, {
+            await fetch(`${window.VibeCodeConfig.apiBaseUrl}/report/${username}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }
             });
@@ -81,14 +81,8 @@ window.ReportGenerator = (function() {
         }
     }
 
-    function getApiBaseUrl() {
-        return window.location.hostname === 'localhost'
-            ? 'http://localhost:8080'
-            : `https://api.${window.location.hostname.replace(/^www\./, '')}`;
-    }
-
     function getApiUrl(username) {
-        return `${getApiBaseUrl()}/report/${username}/stream`;
+        return `${window.VibeCodeConfig.apiBaseUrl}/report/${username}/stream`;
     }
 
     function handleQueued(e) {

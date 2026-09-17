@@ -21,11 +21,6 @@
         opencode: '#fb923c'
     };
 
-    // API configuration
-    const API_BASE = window.location.hostname === 'localhost'
-        ? 'http://localhost:8080'
-        : `https://api.${window.location.hostname.replace(/^www\./, '')}`;
-
     // State
     let username = null;
     let userData = null;
@@ -65,7 +60,7 @@
         const timeoutId = setTimeout(() => controller.abort(), 2000);
 
         try {
-            const response = await fetch(`${API_BASE}/health`, {
+            const response = await fetch(`${window.VibeCodeConfig.apiBaseUrl}/health`, {
                 method: 'HEAD',
                 signal: controller.signal
             });
@@ -130,7 +125,7 @@
 
     async function loadFromAPI(username) {
         try {
-            const response = await fetch(`${API_BASE}/user/${username}`);
+            const response = await fetch(`${window.VibeCodeConfig.apiBaseUrl}/user/${username}`);
 
             if (!response.ok) {
                 if (response.status === 404) {
