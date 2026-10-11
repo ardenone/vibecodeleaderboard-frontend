@@ -3,7 +3,8 @@ node_modules/
 
 # Browser-test dependencies: the nix-built Chromium out-link
 # (`nix build nixpkgs#chromium --out-link tests/.chromium`) is machine-local.
-tests/.chromium/
+# No trailing slash: the out-link is a symlink, which directory patterns miss.
+tests/.chromium
 
 # NEEDLE execution traces are local diagnostics.
 **/.beads/traces/
