@@ -1,0 +1,13 @@
+{
+  "name": "vibecodeleaderboard-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static frontend for the Vibe Code Leaderboard",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/run.mjs"
+  },
+  "devDependencies": {
+    "playwright-core": "1.59.1"
+  }
+}

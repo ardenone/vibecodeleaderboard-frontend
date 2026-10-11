@@ -117,6 +117,19 @@ The project has no frontend build step. Run the browser regression suite with
 runner can build Chromium with Nix when needed, or use an installed browser by
 setting `PLAYWRIGHT_CHROMIUM` to its executable path.
 
+`npm test` is self-contained and deterministic: it installs the pinned test
+dependencies if `node_modules` is missing, resolves a Chromium binary, then
+runs every `tests/e2e/*.test.mjs` file with Node's test runner. Each test
+serves the real app shell from a local static server
+(`tests/helpers/server.mjs`) and controls the data it renders through fixture
+leaderboard payloads (`tests/helpers/fixtures.mjs`) instead of the network —
+external requests are blocked and the dev API origin is denied unless a test
+mocks it (`tests/helpers/api-mock.mjs`). The suite asserts that the loading
+state of the leaderboard resolves to rendered rows (and to the documented
+failure message when the payload fails), and the command exits nonzero when
+any assertion fails or the browser cannot start, so a broken or stalled
+leaderboard fails the run.
+
 Run the Node-based Pages Function, API/report contract, and production-smoke
 checks with `make test`. Run `scripts/definition-of-done.sh` for the function
 checks plus leaderboard validation and refresh-script self-tests. After

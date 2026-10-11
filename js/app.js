@@ -235,7 +235,7 @@ async function showGenerateReportOption(username, container) {
     container.innerHTML = `
         <div class="user-result-card" data-report-option>
             <div class="user-result-header">
-                <img src="${avatarUrl}" alt="${username}" class="user-result-avatar" width="60" height="60" onerror="this.parentElement.innerHTML='<div class=\\\"user-result-avatar\\\"></div>'">
+                <img src="${avatarUrl}" alt="${username}" class="user-result-avatar" width="60" height="60" onerror="this.outerHTML='<div class=&quot;user-result-avatar&quot;></div>'">
                 <div class="user-result-info">
                     <h3>${username}</h3>
                     <div class="not-found">Not on the leaderboard yet</div>
@@ -441,6 +441,8 @@ function renderVirtualWindow(start, end) {
 }
 
 function syncVirtualWindow(start, end) {
+    const tbody = document.getElementById('leaderboardBody');
+
     if (!topSpacer || !bottomSpacer) {
         renderVirtualWindow(start, end);
         return;
