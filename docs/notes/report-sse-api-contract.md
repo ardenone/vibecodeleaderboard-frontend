@@ -39,7 +39,7 @@ All paths below are relative to that base.
 ### 1. `HEAD /health` — reachability pre-check
 
 Issued before every report generation and before the profile page's API fallback, with a
-**2-second `AbortController` timeout**.
+**2-second `AbortController` timeout** (`js/report.js:22-30`).
 
 Reachability semantics, exactly as the client applies them:
 
@@ -47,25 +47,41 @@ Reachability semantics, exactly as the client applies them:
 |---|---|
 | any 2xx (`response.ok`) | **reachable** |
 | **404** | **reachable** — a server that is up but lacks a `/health` route is still up |
-| any other status (e.g. 5xx) | **not reachable** |
-| network error | not reachable |
+| any other final HTTP status (e.g. 3xx or 5xx) | **not reachable** |
+| fetch/network rejection | not reachable |
 | no response within 2s (`AbortError`) | not reachable |
 
 Unreachable means the feature is disabled up front, with a distinct message:
 *"Report generation is temporarily unavailable. The API service is currently
-unreachable."* — no EventSource is ever constructed. This is the state visitors see while
-the backend is offline (the normal state today).
+unreachable."* — `generate()` returns before constructing an EventSource
+(`js/report.js:42-47`). The exact `response.ok || response.status === 404` decision and
+the separate timeout/network-error handling are in `js/report.js:26-38`.
 
 ### 2. `POST /report/{username}` — trigger generation
 
 Called **after** the stream (endpoint 3) is already open. No body is sent beyond
 `Content-Type: application/json` (empty body).
 
-* The response **status and body are never inspected**. Generation results arrive
-  exclusively over the stream.
-* A **network-level failure** of this POST is *not* silent: the `await` rejects and the
-  modal shows the raw error message. The server must therefore keep the endpoint
-  cheap — the heavy work belongs behind the stream.
+* The response **status and body are never inspected**. A 2xx, 4xx, 5xx, or any other
+  HTTP response resolves `fetch()` and produces no direct UI error; generation results
+  arrive exclusively over the stream. The server must therefore use the stream for
+  success/failure signaling rather than relying on the POST status.
+* A **fetch-level failure** of this POST (for example a network/CORS rejection) is not
+  silent: the `await` rejects, the current EventSource is closed, and the modal shows
+  the rejection's raw `error.message` (`js/report.js:61-81`, `js/report.js:219-235`).
+  There is no POST timeout or `AbortSignal` (`js/report.js:73-77`), so a POST that hangs
+  leaves `generate()` waiting indefinitely.
+
+HTTP response failures are therefore handled as follows:
+
+| Response surface | Trigger | Client handling |
+|---|---|---|
+| `HEAD /health` | any final status other than 2xx or 404 | pre-flight fails; no stream is opened and the unavailable message is shown |
+| `POST /report/{username}` | any HTTP status, including 4xx/5xx | status/body ignored; no direct error is shown; the stream remains responsible for the outcome |
+| `GET /report/{username}/stream` | non-200 response or wrong content type | native EventSource `error`; stream closes and the generic report-failure message is shown (`js/report.js:64-71`, `js/report.js:210-217`) |
+
+The health and POST rows describe HTTP responses. A rejected `fetch()` is not an HTTP
+response; it follows the separate POST fetch-level failure path above.
 
 Ordering contract: the client connects to the stream *first* and triggers generation
 *second*, so the server must not require the POST to arrive before it accepts stream
@@ -171,7 +187,7 @@ For a handled terminal condition, the client applies exactly one of these outcom
 | **Success** | `complete` event | closes the EventSource, then renders the report |
 | **Failure (application)** | named `error` event | closes the EventSource, then shows the fixed generic message |
 | **Failure (transport)** | native EventSource error: non-200 status, wrong content type, connection drop | invokes the same handler, which closes the EventSource and shows the fixed generic message |
-| **Failure (pre-flight)** | reachability check fails, or the POST trigger rejects at the network level | no stream is opened for a failed reachability check; a failed POST is caught, the current stream is closed, and the error text is shown |
+| **Failure (pre-flight)** | reachability check fails, or the POST trigger rejects at the fetch level | no stream is opened for a failed reachability check; a failed POST is caught, the current stream is closed, and the raw rejection message is shown |
 
 Because the application `error` event and a native transport error land in the *same*
 listener, the client cannot tell them apart. They are indistinguishable in the UI, and
@@ -210,24 +226,26 @@ The terminal `complete` event payload — the only "report response" the client 
 (The `POST /report/{username}` response is never read; the stream event is the source of
 truth. A future REST `GET /report/{username}` should return this same shape.)
 
-| Field | Type | Required | Client use / default when absent |
+| Field | Type | Presence / constraint | Client use / handling when absent |
 |---|---|---|---|
-| `username` | string | yes* | report header; defaults to "Unknown"/`unknown` avatar |
-| `rank` | number | yes* | "#N of …" badge |
-| `total_ranked` | number | yes* | denominator of the badge; `"N/A"` if absent |
-| `percentile` | number 0–1 | yes* | rendered ×100 as "Top N.N%"; "Top 0.0%" if absent |
-| `total_commits` | number | yes* | headline count **and** denominator for `by_tool` percentages; "0" if absent |
-| `repos_with_commits` | number | yes* | "· N repos" line; `0` if absent |
-| `by_tool` | map of tool → count | no | Tools Used bars, sorted descending; section shows "No tools detected" if empty/absent |
-| `sparkline_30d` | number[30] | no | daily commit counts, max-normalized bar heights; "No recent activity" if empty/absent |
-| `top_repos` | array | no | see below; "No repos found" if empty/absent |
-| `top_repos[].repo` | string | yes (within array) | repo name |
-| `top_repos[].commits` | number | yes (within array) | "N commits" |
-| `top_repos[].tools` | **array of tool names** | **yes (within array)** | icon strip; an entry *without* `tools` throws and freezes the modal (see [Known client-side gaps](#known-client-side-gaps-documented-not-specd)) — `tools: []` is the correct empty value |
-| `first_ai_commit` | ISO 8601 timestamp | no | "First AI Commit" section; section omitted entirely if absent |
+| `username` | string | optional; falsy values use the default | report header; `"Unknown"` and `unknown` avatar when absent/falsy (`js/report.js:274-280`) |
+| `rank` | number | required for a meaningful report; no fallback | `"#${data.rank}"` in the badge; absent renders the literal `undefined` (`js/report.js:277-280`) |
+| `total_ranked` | number | optional | denominator of the badge; `"N/A"` if absent/falsy |
+| `percentile` | number 0–1 | optional | rendered ×100 as "Top N.N%"; `"Top 0.0%"` if absent/falsy |
+| `total_commits` | number | optional for the headline; **required when `by_tool` is present** | headline uses `"0"` if absent, but `by_tool` percentages use the raw value and become `NaN%` if it is absent |
+| `repos_with_commits` | number | optional | `"· N repos"` line; `0` if absent/falsy |
+| `by_tool` | map of tool → count | optional; individual keys are optional and unknown keys are accepted | Tools Used bars, sorted descending; section shows "No tools detected" if empty/absent (`js/report.js:254-266`) |
+| `sparkline_30d` | array of numbers (normally 30) | optional; the client does not enforce length | daily commit counts, max-normalized bar heights; "No recent activity" if empty/absent (`js/report.js:268-272`) |
+| `top_repos` | array | optional | see below; "No repos found" if empty/absent (`js/report.js:237-252`) |
+| `top_repos[].repo` | string | expected within each entry; interpolated without validation | repo name |
+| `top_repos[].commits` | number | expected within each entry; interpolated without validation | "N commits" |
+| `top_repos[].tools` | **array of tool names** | **required within each entry and must be an array** | icon strip; an entry *without* `tools` throws and freezes the modal — `tools: []` is the correct empty value (`js/report.js:238-241`) |
+| `first_ai_commit` | ISO 8601 timestamp | optional; rendered when truthy | "First AI Commit" section; section omitted if absent/falsy (`js/report.js:311-316`) |
 
-\* marked fields are read unconditionally — absent values render as the listed defaults
-rather than an error, but a conforming server always sends them.
+The client does not validate the payload schema. The presence rules above describe the
+wire values that are safe and meaningful for the actual renderer: top-level fields with
+defaults may be omitted, but `top_repos[].tools` cannot be omitted once its containing
+entry exists. The report renderer is implemented in `js/report.js:237-323`.
 
 > **Shape asymmetry, deliberate:** `tools` is a *map of counts* in the `scanned` event but
 > an *array of names* inside `top_repos[]`. Both are consumed as typed above; do not
@@ -235,11 +253,17 @@ rather than an error, but a conforming server always sends them.
 
 ## Tool keys
 
-The fixed enum the client has icons/colors for (unknown keys degrade to ⬜):
+The client has icons/colors for this fixed enum (unknown keys degrade to ⬜):
 
 ```
 claude · cursor · aider · codex · gemini · opencode
 ```
+
+No key in that enum is individually required. `scanned.tools` may be absent and defaults
+to an empty map, and `by_tool` may be absent or empty; when present, the client iterates
+whatever keys the server sends. The same fallback applies to tool names in
+`top_repos[].tools` (`js/report.js:166-176`, `js/report.js:238-241`, `js/report.js:254-266`;
+the enum is declared in `js/app.js:32-40`).
 
 ## 4. `GET /user/{username}` — profile fallback
 
