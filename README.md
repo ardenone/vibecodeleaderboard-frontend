@@ -130,6 +130,12 @@ failure message when the payload fails), and the command exits nonzero when
 any assertion fails or the browser cannot start, so a broken or stalled
 leaderboard fails the run.
 
+The responsive browser checks use a 375 × 667 narrow viewport and a
+1280 × 800 desktop viewport. They exercise leaderboard search and tool
+filters, profile sharing, and report error controls at both sizes, while
+checking that the document has no horizontal overflow. The leaderboard table
+may scroll within its own container on the narrow viewport.
+
 Run the Node-based Pages Function, API/report contract, and production-smoke
 checks with `make test`. Run `scripts/definition-of-done.sh` for the function
 checks plus leaderboard validation and refresh-script self-tests. After

@@ -87,6 +87,13 @@ test('report generation with an unreachable API shows the error modal', async ()
     const content = page.locator('#reportContent');
     await content.getByText('Report generation is temporarily unavailable', { exact: false }).waitFor();
     assert.equal(await page.locator('#reportContent .repo-status.error').count(), 1);
+    const errorText = await content.textContent();
+    assert.match(errorText, /API service is currently unreachable/);
+    await page.waitForTimeout(350);
+    assert.equal(await content.textContent(), errorText, 'the error state remains stable after the failed request');
+    assert.equal(await page.locator('#reportModal.active').count(), 1, 'the error stays visible until dismissed');
+    await page.locator('#closeModal').click();
+    assert.equal(await page.locator('#reportModal.active').count(), 0, 'the error can be dismissed');
     assertNoPageErrors(pageErrors);
   } finally {
     await close();
