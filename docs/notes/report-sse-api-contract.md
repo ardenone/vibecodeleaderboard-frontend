@@ -87,10 +87,12 @@ Framing requirements (the client breaks otherwise):
   `scanning`, `scanned`, `complete`, `error`). The client registers only named listeners;
   a default `message` event is silently ignored — the UI would sit at "Connecting…"
   forever.
-* Each event's `data:` **must be exactly one JSON object**. Handlers call bare
-  `JSON.parse(e.data)` with no error handling; a malformed or split payload throws inside
-  the listener and freezes the modal on stale content. Multi-line `data:` fields are
-  therefore not safe to use.
+* For `queued`, `started`, `scanning`, `scanned`, and `complete`, each event's `data:`
+  **must be exactly one JSON object**. Those handlers call bare `JSON.parse(e.data)` with
+  no error handling; a malformed or split payload throws inside the listener and freezes
+  the modal on stale content. The `error` handler does not parse `e.data`, and a native
+  transport error has no application payload. Multi-line `data:` fields are therefore
+  not safe for the JSON-parsed events.
 * `id:` fields are unused (the client never replays via `Last-Event-ID`), and `retry:`
   is effectively meaningless to this client — see [Reconnect behavior](#reconnect-behavior).
 * **Heartbeat:** the client has no inactivity timeout on the stream. Until the first
@@ -101,13 +103,17 @@ Framing requirements (the client breaks otherwise):
 #### Event lifecycle
 
 ```
-queued* → started → (scanning → scanned)+ → complete
-                          ↘ error (from any point)
+uncached: queued* → started → (scanning → scanned)* → complete
+cached:   complete
+failure:  error (at any point before the stream is closed)
 ```
 
 * `queued` may repeat while the job waits (each replaces the position display).
-* One `scanning` per repo, followed by its matching `scanned`; repos are keyed by the
-  `repo` field, which must be unique and consistent between the two events.
+* For an uncached report, each `scanning` row is keyed by `repo` and its matching `scanned`
+  event must use the same key to update that row. A duplicate `scanning` key is ignored by
+  the client; a `scanned` event with no matching row has no visible effect.
+* A cached report may go directly to `complete`, without `queued`, `started`, `scanning`,
+  or `scanned` events.
 * `complete` and `error` are the **terminal** events: at most one, always last, and the
   server should end the stream immediately after. The client closes the connection upon
   receiving either.
@@ -153,21 +159,23 @@ unobservable. A `{ "code": string, "message": string }` body is still the recomm
 shape so future clients (and server logs) can distinguish causes; do not rely on it
 reaching users.
 
-**`complete`** (terminal success) — see [The completed report response](#the-completed-report-response).
+**`complete`** (terminal success) — the client parses the event data and closes the
+EventSource before rendering it; see [The completed report response](#the-completed-report-response).
 
 ## Terminal states
 
-The modal ends in exactly one of:
+For a handled terminal condition, the client applies exactly one of these outcomes:
 
 | Terminal state | Trigger | Client action |
 |---|---|---|
-| **Success** | `complete` event | closes the EventSource, renders the report |
-| **Failure (application)** | named `error` event | closes the EventSource, fixed generic message |
-| **Failure (transport)** | native EventSource error: non-200 status, wrong content type, connection drop | same handler fires — closes the EventSource, fixed generic message |
-| **Failure (pre-flight)** | reachability check fails, or the POST trigger rejects at the network level | no stream at all (or stream torn down); error text shown |
+| **Success** | `complete` event | closes the EventSource, then renders the report |
+| **Failure (application)** | named `error` event | closes the EventSource, then shows the fixed generic message |
+| **Failure (transport)** | native EventSource error: non-200 status, wrong content type, connection drop | invokes the same handler, which closes the EventSource and shows the fixed generic message |
+| **Failure (pre-flight)** | reachability check fails, or the POST trigger rejects at the network level | no stream is opened for a failed reachability check; a failed POST is caught, the current stream is closed, and the error text is shown |
 
 Because the application `error` event and a native transport error land in the *same*
-listener, the client cannot tell them apart. They are indistinguishable in the UI.
+listener, the client cannot tell them apart. They are indistinguishable in the UI, and
+neither terminal failure path permits EventSource auto-reconnect.
 
 ## Reconnect behavior
 
