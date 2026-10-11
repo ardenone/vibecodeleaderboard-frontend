@@ -7,17 +7,30 @@ record verified current state and decisions made from here forward.
 
 ## What this repo is
 
-A public, static HTML/CSS/JS site (no build step, no framework, no `package.json`):
+A public HTML/CSS/JS site served as static assets alongside Cloudflare Pages
+Functions. There is no frontend build step or framework; the root `package.json`
+and lockfile provide the Node.js test tooling:
 
 - `index.html` + `js/app.js` + `css/style.css` — the leaderboard table, client-side search
   (exact-match against the baked-in `leaderboard.json`), and tool filtering.
 - `user.html` + `js/profile.js` + `css/profile.css` — shareable per-user profile page at
-  `/u/<username>` (routed via `_redirects`), intended to carry per-user Open Graph tags for
-  link unfurls.
+  `/u/<username>` (routed by Pages Functions with an `_redirects` fallback); the browser
+  code renders profile details and the function injects per-user Open Graph tags for link
+  previews.
 - `js/config.js` — the shared browser API base URL configuration used by the API clients.
 - `js/report.js` — SSE client for an on-demand "generate a report for any GitHub user"
-  feature, talking to a backend API at `https://api.<hostname>`.
+  feature, talking to this repo's Pages Functions API at `https://api.<hostname>`.
 - `leaderboard.json` — baked-in leaderboard data, fetched at page load for instant render.
+- `functions/` — the hostname-gated API (`/health`, `/leaderboard.json`, `/user/*`,
+  `/report/*` and SSE) plus profile Open Graph and generated image routes. `_routes.json`
+  controls which paths invoke Functions; `_redirects` routes `/u/*` to the profile page as
+  a static fallback.
+- `scripts/` — leaderboard schema validation and safe refresh, the definition-of-done
+  checks, and the post-deployment production smoke check.
+- `package.json` / `package-lock.json` and `tests/` — pinned Playwright tooling, browser
+  end-to-end tests, and API/report contract tests. `npm test` runs the browser suite;
+  `make test` runs the Node-based function and contract checks; `scripts/definition-of-done.sh`
+  also exercises the leaderboard scripts.
 
 ## Audited status (2026-07-20)
 

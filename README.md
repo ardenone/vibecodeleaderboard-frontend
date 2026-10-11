@@ -4,13 +4,14 @@ Public frontend for the Vibe Code Leaderboard, tracking AI-assisted coding acros
 
 ## Overview
 
-This is a static HTML/CSS/JavaScript site that displays the leaderboard of developers using AI coding tools. The site works standalone with baked-in `leaderboard.json` data and includes an on-demand report generation feature powered by the backend API.
+This is an HTML/CSS/JavaScript site that displays the leaderboard of developers using AI coding tools. Static assets and Cloudflare Pages Functions are deployed together: the site works with baked-in `leaderboard.json` data, while the Functions provide the API, report generation, and shareable profile metadata.
 
 ## Features
 
 - **Leaderboard Display**: Browse top AI-assisted developers ranked by commit count
 - **Client-Side Search**: Search for any GitHub username
 - **Tool Filtering**: Filter by specific AI tools (Claude, Cursor, Aider, etc.)
+- **Shareable Profiles**: Open a per-user profile at `/u/<username>`, with server-rendered Open Graph metadata for link previews
 - **On-Demand Reports**: Generate detailed reports for any user (not just those on the leaderboard)
 - **Real-Time Progress**: SSE-powered progress updates during report generation
 - **Responsive Design**: Works on desktop and mobile devices
@@ -18,15 +19,19 @@ This is a static HTML/CSS/JavaScript site that displays the leaderboard of devel
 ## Architecture
 
 ```
-Static Site (this repo)
-    ├── index.html         - Main leaderboard page
-    ├── css/style.css      - Styling
-    ├── js/config.js       - Shared API base URL configuration
-    ├── js/app.js          - Leaderboard rendering, search, filtering
-    └── js/report.js       - SSE client, report generation UX
+Pages project (this repo; static assets + Functions)
+    ├── index.html, css/style.css, js/app.js   - Leaderboard page, styling, search and filtering
+    ├── user.html, css/profile.css, js/profile.js - Interactive per-user profile page
+    ├── js/config.js, js/report.js             - Shared API URL and report/SSE client
+    ├── functions/                             - Host-gated API, report/SSE, user lookup,
+    │                                             profile OG metadata, and OG image routes
+    ├── _redirects, _routes.json                - Profile-page fallback and Pages routing
+    ├── scripts/                                - Leaderboard validation/refresh, definition
+    │                                             of done, and production smoke check
+    └── tests/                                  - Browser end-to-end, API, and contract suites
 ```
 
-The site includes `leaderboard.json` at build time for instant rendering. The API is only required for the on-demand report feature.
+`leaderboard.json` is shipped as a static asset for instant rendering. There is no frontend build step; the Pages Functions serve API endpoints from the same deployment and provide server-rendered profile metadata. `package.json` and its lockfile pin the Node.js browser-test dependency.
 
 ## Local Development
 
@@ -104,6 +109,19 @@ proxy origin and ensure it forwards `/health`, `/report/*` (including the SSE
 stream), and `/user/*` to the backend without buffering. A proxy does not
 remove the need to configure CORS unless the browser request becomes
 same-origin.
+
+### Running the test suites
+
+The project has no frontend build step. Run the browser regression suite with
+`npm test`; it uses the pinned `playwright-core` dependency and Chromium. The
+runner can build Chromium with Nix when needed, or use an installed browser by
+setting `PLAYWRIGHT_CHROMIUM` to its executable path.
+
+Run the Node-based Pages Function, API/report contract, and production-smoke
+checks with `make test`. Run `scripts/definition-of-done.sh` for the function
+checks plus leaderboard validation and refresh-script self-tests. After
+deploying, `make smoke-production` checks the live site and API; it is separate
+from the local test suites.
 
 ## Deployment
 
@@ -262,7 +280,7 @@ behavior: [`docs/notes/leaderboard-refresh.md`](docs/notes/leaderboard-refresh.m
 
 ## API Contract
 
-The frontend expects the backend API to provide these endpoints. The full,
+The Pages Functions API provides these endpoints. The full,
 normative contract — SSE event payloads, event ordering, terminal success and
 failure states, HTTP error responses, reconnect and timeout behavior, and the
 completed report response — is documented in
