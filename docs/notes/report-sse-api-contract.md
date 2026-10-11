@@ -17,8 +17,9 @@ behavior is pinned by `functions/test-api.js`; the client side by
 
 ## Base URL resolution
 
-Resolved once in `js/config.js` and consumed everywhere as
-`window.VibeCodeConfig.apiBaseUrl` (frozen — it is the single source of truth):
+Resolved once when `js/config.js` is evaluated and consumed everywhere as
+`window.VibeCodeConfig.apiBaseUrl` (frozen — it is the single source of truth;
+`js/config.js:5-15`):
 
 ```
 hostname in {localhost, 127.0.0.1, [::1]}   ->  http://localhost:8080
@@ -39,7 +40,8 @@ All paths below are relative to that base.
 ### 1. `HEAD /health` — reachability pre-check
 
 Issued before every report generation and before the profile page's API fallback, with a
-**2-second `AbortController` timeout** (`js/report.js:22-30`).
+**2-second `AbortController` timeout** (`js/report.js:22-39`; profile fallback uses the
+same behavior at `js/profile.js:58-75`).
 
 Reachability semantics, exactly as the client applies them:
 
@@ -195,10 +197,11 @@ neither terminal failure path permits EventSource auto-reconnect.
 
 ## Reconnect behavior
 
-Standard `EventSource` auto-reconnects on transient drops. **This client never
-reconnects.** Its handler is attached with `addEventListener('error', …)`, which catches
-both server-sent `event: error` *and* the browser's native error events; the handler
-unconditionally calls `close()`, cancelling any pending reconnection the browser had
+Standard `EventSource` auto-reconnects on transient drops. **This client treats every
+stream error as terminal and never auto-reconnects.** The listener is attached alongside
+the other stream listeners at `js/report.js:64-71`; it catches both server-sent
+`event: error` and the browser's native error events, then unconditionally calls
+`close()` at `js/report.js:210-217`, cancelling any pending reconnection the browser had
 scheduled.
 
 Consequences, binding on the server:
@@ -216,9 +219,9 @@ Consequences, binding on the server:
 
 | Surface | Timeout | Effect on expiry |
 |---|---|---|
-| `HEAD /health` pre-check | 2s (`AbortController`) | feature reported unreachable; report/profile fallback disabled |
-| `POST /report/{username}` | none | a hang stalls `generate()` before the modal advances; server must respond (status irrelevant) |
-| SSE stream | none (no watchdog) | a silent server leaves the modal on "Connecting…" or the last progress frame forever — hence the heartbeat requirement above |
+| `HEAD /health` pre-check | 2s (`AbortController`; `js/report.js:22-39`) | abort is treated as unreachable; report generation is stopped before `EventSource` creation (`js/report.js:42-47`) |
+| `POST /report/{username}` | none (`js/report.js:73-77`) | a hang leaves the already-open modal on "Connecting to API…" indefinitely; an HTTP status is otherwise ignored |
+| SSE stream | none — no client inactivity watchdog (`js/report.js:64-71`) | a silent connection leaves the modal on "Connecting to API…" or the last progress frame forever; a transport `error` is handled only when the browser emits one, then closes the stream (`js/report.js:210-217`) |
 
 ## The completed report response
 
@@ -307,17 +310,22 @@ Recorded so nobody mistakes them for server obligations:
 
 * No client watchdog on the stream — a silent server stalls the UI silently (mitigated by
   the heartbeat SHOULD above).
-* A malformed JSON payload in any event throws unhandled and freezes the modal.
+* A malformed JSON payload in a JSON-parsed event (`queued`, `started`, `scanning`,
+  `scanned`, or `complete`) throws unhandled and freezes the modal; the `error` event is
+  not parsed (`js/report.js:88-90`, `104-106`, `125-127`, `166-168`, `199-200`,
+  `210-217`).
 * The `scanning` handler renders pending placeholder rows for indices
   `data.index … data.total - 1` *in addition to* the scanning row itself, so the first
   repo's scan momentarily shows one extra placeholder row. Cosmetic; `index` is still
-  0-based and `total` is the repo count.
+  0-based and `total` is the repo count (`js/report.js:130-159`).
 * A `top_repos[]` entry **without** a `tools` field throws
   (`TypeError: (repo.tools || {}).map is not a function` — the `{}` fallback is
   map-less, unlike the `scanned` event's `Object.entries(data.tools || {})`), so
   `showReport` aborts before assigning `innerHTML`: the stream is already closed and
   the modal freezes on the last progress frame. This is why `top_repos[].tools` is
-  marked required above; use `[]`, not an absent field, for "no tools".
+  marked required above; use `[]`, not an absent field, for "no tools"
+  (`js/report.js:237-252`).
 * `by_tool` percentages divide by the raw `total_commits` field, not the defaulted
   one — `by_tool` present without `total_commits` renders bars labelled
-  `N (NaN%)` with `width: NaN%`. Always send `total_commits` alongside `by_tool`.
+  `N (NaN%)` with `width: NaN%`. Always send `total_commits` alongside `by_tool`
+  (`js/report.js:254-266`).
