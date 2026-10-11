@@ -111,7 +111,12 @@ class FakeEventSource {
   // no events reach listeners after close().
   emit(type, dataObj) {
     if (this.closed) return;
-    const event = { type, data: dataObj === undefined ? '' : JSON.stringify(dataObj) };
+    this.emitRaw(type, dataObj === undefined ? '' : JSON.stringify(dataObj));
+  }
+
+  emitRaw(type, data) {
+    if (this.closed) return;
+    const event = { type, data };
     for (const fn of this.listeners[type] || []) fn(event);
   }
 
@@ -127,7 +132,13 @@ let fetchCalls = [];
 let fetchImpl = null;
 globalThis.fetch = async (input, init) => {
   const url = typeof input === 'string' ? input : input.url;
-  const call = { url, method: init?.method || 'GET' };
+  const call = {
+    url,
+    method: init?.method || 'GET',
+    headers: init?.headers,
+    body: init?.body,
+    signal: init?.signal,
+  };
   fetchCalls.push(call);
   return fetchImpl(url, call);
 };
@@ -223,12 +234,14 @@ test('config: production hostnames resolve to https://api.<host> with www stripp
     resolveBaseUrlFor('www.vibecodeleaderboard.com'),
     'https://api.vibecodeleaderboard.com',
   );
+  assert.equal(resolveBaseUrlFor('preview.example.test'), 'https://api.preview.example.test');
 });
 
 // --- Reachability pre-check (HEAD /health, 2s budget) -----------------------
 
-test('2xx /health is reachable: stream opens, POST trigger is fired', async () => {
+test('any 2xx /health is reachable: stream opens, POST trigger is fired after it', async () => {
   healthyFetch();
+  fetchImpl = (url) => url.endsWith('/health') ? { ok: true, status: 204 } : okResponse(url);
   await generate('octocat');
   const es = FakeEventSource.instances.at(-1);
   assert.equal(es.url, 'http://localhost:8080/report/octocat/stream');
@@ -241,6 +254,9 @@ test('2xx /health is reachable: stream opens, POST trigger is fired', async () =
       'POST http://localhost:8080/report/octocat',
     ],
   );
+  assert.deepEqual(fetchCalls[1].headers, { 'Content-Type': 'application/json' });
+  assert.equal(fetchCalls[1].body, undefined, 'the POST has no body');
+  assert.equal(fetchCalls[1].signal, undefined, 'the POST has no AbortSignal');
   assert.match(dom.reportContent.innerHTML, new RegExp(CONNECTING));
 });
 
@@ -261,14 +277,61 @@ test('5xx /health is unreachable: feature disabled before any stream opens', asy
   assert.match(dom.reportContent.innerHTML, new RegExp(UNAVAILABLE));
 });
 
-test('health timeout (AbortError) is unreachable', async () => {
+test('3xx and 5xx /health responses are both unreachable', async () => {
+  for (const status of [302, 503]) {
+    healthyFetch();
+    fetchImpl = (url) =>
+      url.endsWith('/health') ? { ok: false, status } : okResponse(url);
+    await generate('octocat');
+    assert.equal(FakeEventSource.instances.length, 0, `${status} must not open a stream`);
+    assert.match(dom.reportContent.innerHTML, new RegExp(UNAVAILABLE));
+  }
+});
+
+test('health network rejection is unreachable', async () => {
   healthyFetch();
-  fetchImpl = () => {
-    throw Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
-  };
+  fetchImpl = () => { throw new TypeError('offline'); };
   await generate('octocat');
   assert.equal(FakeEventSource.instances.length, 0);
   assert.match(dom.reportContent.innerHTML, new RegExp(UNAVAILABLE));
+});
+
+test('health uses a 2-second AbortController timeout and abort prevents stream creation', async () => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const timers = [];
+  globalThis.setTimeout = (callback, delay) => {
+    const timer = { callback, delay, cleared: false };
+    timers.push(timer);
+    return timer;
+  };
+  globalThis.clearTimeout = (timer) => { timer.cleared = true; };
+
+  try {
+    fetchImpl = (url, call) => {
+      if (!url.endsWith('/health')) return okResponse(url);
+      return new Promise((_, reject) => {
+        call.signal.addEventListener('abort', () => {
+          reject(Object.assign(new Error('The operation was aborted'), { name: 'AbortError' }));
+        });
+      });
+    };
+
+    const generation = generate('octocat');
+    assert.equal(timers.length, 1);
+    assert.equal(timers[0].delay, 2000);
+    assert.equal(fetchCalls[0].method, 'HEAD');
+    assert.ok(fetchCalls[0].signal instanceof AbortSignal);
+    timers[0].callback();
+    await generation;
+
+    assert.equal(timers[0].cleared, true);
+    assert.equal(FakeEventSource.instances.length, 0);
+    assert.match(dom.reportContent.innerHTML, new RegExp(UNAVAILABLE));
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
 });
 
 // --- Progress lifecycle and payloads ----------------------------------------
@@ -279,6 +342,10 @@ test('queued payload consumes position and estimated_wait_seconds', async () => 
   assert.match(dom.reportContent.innerHTML, /Your Report is Queued/);
   assert.match(dom.reportContent.innerHTML, /Position: 2/);
   assert.match(dom.reportContent.innerHTML, /Est\. wait: 30s/);
+
+  es.emit('queued', { position: 1, estimated_wait_seconds: 10 });
+  assert.match(dom.reportContent.innerHTML, /Position: 1/);
+  assert.match(dom.reportContent.innerHTML, /Est\. wait: 10s/);
 });
 
 test('started payload consumes repos_found as the progress denominator', async () => {
@@ -300,6 +367,25 @@ test('scanning payload keys rows by repo and consumes index/total', async () => 
   assert.equal(dom.repoListProgress.children.length, 4);
 });
 
+test('scanning uses index and total for pending placeholder labels', async () => {
+  const es = await startGeneration();
+  es.emit('started', { repos_found: 3 });
+  es.emit('scanning', { repo: 'octocat/second-repo', index: 1, total: 3 });
+  assert.equal(dom.repoListProgress.children.length, 3);
+  assert.match(dom.repoListProgress.children[1].innerHTML, /Repo #2/);
+  assert.match(dom.repoListProgress.children[2].innerHTML, /Repo #3/);
+});
+
+test('duplicate scanning repo keys are ignored', async () => {
+  const es = await startGeneration();
+  es.emit('started', { repos_found: 2 });
+  es.emit('scanning', { repo: 'octocat/Hello-World', index: 0, total: 2 });
+  const originalRow = dom.repoListProgress.children[0];
+  es.emit('scanning', { repo: 'octocat/Hello-World', index: 1, total: 9 });
+  assert.equal(dom.repoListProgress.children.length, 3);
+  assert.equal(dom.repoListProgress.children[0], originalRow);
+});
+
 test('scanned payload consumes repo/commits_found and a tool→count map, filtering non-positive counts', async () => {
   const es = await startGeneration();
   es.emit('started', { repos_found: 2 });
@@ -316,6 +402,25 @@ test('scanned payload consumes repo/commits_found and a tool→count map, filter
   assert.doesNotMatch(row.innerHTML, /🔵/); // cursor count 0 is filtered
 });
 
+test('scanned payload without optional tools uses an empty map', async () => {
+  const es = await startGeneration();
+  es.emit('started', { repos_found: 1 });
+  es.emit('scanning', { repo: 'octocat/Hello-World', index: 0, total: 1 });
+  es.emit('scanned', { repo: 'octocat/Hello-World', commits_found: 0 });
+  const row = dom.repoListProgress.querySelector('[data-repo="octocat/Hello-World"]');
+  assert.match(row.innerHTML, /0 commits/);
+  assert.doesNotMatch(row.innerHTML, /🟣|🔵|⬜/);
+});
+
+test('scanned event without a matching scanning row has no visible effect', async () => {
+  const es = await startGeneration();
+  es.emit('started', { repos_found: 1 });
+  const before = dom.reportContent.innerHTML;
+  es.emit('scanned', { repo: 'octocat/missing', commits_found: 9, tools: { claude: 9 } });
+  assert.equal(dom.reportContent.innerHTML, before);
+  assert.equal(dom.repoListProgress.children.length, 0);
+});
+
 test('terminal complete closes the stream and renders the full report response', async () => {
   const es = await startGeneration();
   es.emit('complete', FULL_REPORT);
@@ -330,6 +435,18 @@ test('terminal complete closes the stream and renders the full report response',
   assert.match(html, /octocat\/Hello-World/);
   assert.match(html, /210 commits/);
   assert.match(html, /March 15, 2024/); // first_ai_commit (12:00Z stays same date in any TZ)
+  assert.match(html, /🟣 🔵/); // top_repos[].tools is an array of tool names
+  assert.match(html, /300 \(60\.4%\)/);
+  assert.match(html, /150 \(30\.2%\)/);
+  assert.match(html, /47 \(9\.5%\)/);
+  assert.ok(html.indexOf('Claude') < html.indexOf('Cursor'));
+  assert.ok(html.indexOf('Cursor') < html.indexOf('Aider'), 'by_tool bars are sorted descending');
+  assert.match(html, /height: 100%/);
+  assert.match(html, /height: 11\.11111111111111%/);
+
+  const rendered = dom.reportContent.innerHTML;
+  es.emit('error', { message: 'a terminal stream cannot fail again' });
+  assert.equal(dom.reportContent.innerHTML, rendered, 'events after complete are ignored');
 });
 
 test('a cached report replays terminal complete immediately, without progress events', async () => {
@@ -341,13 +458,55 @@ test('a cached report replays terminal complete immediately, without progress ev
 
 test('complete with absent optionals renders the documented defaults', async () => {
   const es = await startGeneration();
-  es.emit('complete', { username: 'minimal', rank: 999 });
+  es.emit('complete', { rank: 999 });
   const html = dom.reportContent.innerHTML;
+  assert.match(html, /<h2>Unknown<\/h2>/);
+  assert.match(html, /src="https:\/\/github\.com\/unknown\.png"/);
+  assert.match(html, /#999 of N\/A/);
+  assert.match(html, /0 commits · 0 repos/);
   assert.match(html, /Top 0\.0%/);
   assert.match(html, /No tools detected/);
   assert.match(html, /No recent activity/);
   assert.match(html, /No repos found/);
   assert.doesNotMatch(html, /First AI Commit/);
+});
+
+test('complete applies defaults to falsy values and empty collections', async () => {
+  const es = await startGeneration();
+  es.emit('complete', {
+    username: '', rank: 1, total_ranked: 0, percentile: 0,
+    total_commits: 0, repos_with_commits: 0, by_tool: {},
+    sparkline_30d: [], top_repos: [], first_ai_commit: '',
+  });
+  const html = dom.reportContent.innerHTML;
+  assert.match(html, /<h2>Unknown<\/h2>/);
+  assert.match(html, /src="https:\/\/github\.com\/unknown\.png"/);
+  // Zero is stringified before the fallback, so it renders as "0"; absence is N/A.
+  assert.match(html, /#1 of 0/);
+  assert.match(html, /0 commits · 0 repos/);
+  assert.match(html, /Top 0\.0%/);
+  assert.match(html, /No tools detected/);
+  assert.match(html, /No recent activity/);
+  assert.match(html, /No repos found/);
+  assert.doesNotMatch(html, /First AI Commit/);
+});
+
+test('complete without rank renders the documented literal undefined rank', async () => {
+  const es = await startGeneration();
+  es.emit('complete', { username: 'rankless' });
+  assert.match(dom.reportContent.innerHTML, /#undefined of N\/A/);
+});
+
+test('complete accepts unknown tool keys and renders the documented fallback icon', async () => {
+  const es = await startGeneration();
+  es.emit('complete', {
+    username: 'u', rank: 1, total_commits: 2, by_tool: { mystery: 2 },
+    top_repos: [{ repo: 'u/repo', commits: 2, tools: ['mystery'] }],
+  });
+  const html = dom.reportContent.innerHTML;
+  assert.match(html, /⬜ Mystery/);
+  assert.match(html, /class="repo-tools">⬜/);
+  assert.match(html, /2 \(100\.0%\)/);
 });
 
 test('complete: a top_repos entry without tools throws — tools is required within the array', async () => {
@@ -399,11 +558,27 @@ test('default message events are ignored: only named events drive the UI', async
   assert.match(before, new RegExp(CONNECTING));
 });
 
+for (const eventType of ['queued', 'started', 'scanning', 'scanned', 'complete']) {
+  test(`${eventType} requires one valid JSON data object`, async () => {
+    const es = await startGeneration();
+    if (eventType === 'scanning' || eventType === 'scanned') {
+      es.emit('started', { repos_found: 1 });
+      if (eventType === 'scanned') {
+        es.emit('scanning', { repo: 'octocat/Hello-World', index: 0, total: 1 });
+      }
+    }
+    const before = dom.reportContent.innerHTML;
+    assert.throws(() => es.emitRaw(eventType, '{"split":\n'), SyntaxError);
+    assert.equal(dom.reportContent.innerHTML, before, 'malformed/split JSON leaves stale content');
+    assert.equal(es.closed, false, 'JSON parse failure is not handled as a terminal event');
+  });
+}
+
 // --- Terminal failure and reconnect behavior ---------------------------------
 
 test('named error event is terminal: stream closed, generic message, server detail never surfaced', async () => {
   const es = await startGeneration();
-  es.emit('error', { code: 'scan_failed', message: 'github rate limited' });
+  assert.doesNotThrow(() => es.emitRaw('error', 'not JSON: github rate limited'));
   assert.equal(es.closed, true, 'error must close the EventSource (terminal failure)');
   const html = dom.reportContent.innerHTML;
   assert.match(html, new RegExp(GENERIC_FAILURE));
@@ -419,22 +594,109 @@ test('native transport error is terminal: reconnect is cancelled, later events a
   assert.equal(dom.reportContent.innerHTML, before, 'no events are processed after the stream is closed');
 });
 
+test('non-200, wrong content type, and dropped stream all use terminal transport failure handling', async () => {
+  for (const cause of ['non-200 HTTP response', 'wrong Content-Type', 'connection drop']) {
+    const es = await startGeneration();
+    const openedCount = FakeEventSource.instances.length;
+    es.emit('started', { repos_found: 2 });
+    es.emit('error'); // EventSource reports these transport failures as a native error.
+    assert.equal(es.closed, true, `${cause} closes the EventSource`);
+    assert.match(dom.reportContent.innerHTML, new RegExp(GENERIC_FAILURE));
+    assert.equal(FakeEventSource.instances.length, openedCount, `${cause} does not create a replacement stream`);
+  }
+});
+
+test('an idle SSE stream has no client inactivity watchdog', async () => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const timers = [];
+  globalThis.setTimeout = (callback, delay) => {
+    const timer = { callback, delay, cleared: false };
+    timers.push(timer);
+    return timer;
+  };
+  globalThis.clearTimeout = (timer) => { timer.cleared = true; };
+
+  try {
+    const es = await startGeneration();
+    assert.deepEqual(timers.map((timer) => timer.delay), [2000]);
+    assert.equal(timers[0].cleared, true, 'only the completed health timer exists');
+    assert.match(dom.reportContent.innerHTML, new RegExp(CONNECTING));
+    assert.equal(es.closed, false);
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
+});
+
+test('a pending POST has no timeout or AbortSignal and leaves the opened stream connecting', async () => {
+  const originalSetTimeout = globalThis.setTimeout;
+  const originalClearTimeout = globalThis.clearTimeout;
+  const timers = [];
+  globalThis.setTimeout = (callback, delay) => {
+    const timer = { callback, delay, cleared: false };
+    timers.push(timer);
+    return timer;
+  };
+  globalThis.clearTimeout = (timer) => { timer.cleared = true; };
+
+  try {
+    fetchImpl = (url) => {
+      if (url.endsWith('/health')) return { ok: true, status: 200 };
+      return new Promise(() => {});
+    };
+    let settled = false;
+    const generation = generate('octocat').then(() => { settled = true; });
+    await new Promise((resolve) => originalSetTimeout(resolve, 0));
+
+    assert.equal(FakeEventSource.instances.length, 1, 'the stream opens before the POST');
+    assert.equal(fetchCalls[1].method, 'POST');
+    assert.equal(fetchCalls[1].signal, undefined);
+    assert.deepEqual(timers.map((timer) => timer.delay), [2000]);
+    assert.equal(timers[0].cleared, true);
+    assert.equal(settled, false, 'the POST promise remains pending');
+    assert.match(dom.reportContent.innerHTML, new RegExp(CONNECTING));
+    assert.equal(FakeEventSource.instances[0].closed, false);
+    void generation;
+  } finally {
+    globalThis.setTimeout = originalSetTimeout;
+    globalThis.clearTimeout = originalClearTimeout;
+  }
+});
+
 // --- POST trigger -------------------------------------------------------------
 
-test('POST network failure surfaces the raw error even though the stream opened', async () => {
-  healthyFetch();
-  await generate('octocat');
-  // Keep health answering (a second pre-check runs for the second user) but
-  // fail the trigger POST at the network level: generate() must catch the
-  // rejection and surface the raw message rather than hang or silently stop.
+test('POST network rejection closes the current stream and surfaces the raw error', async () => {
   fetchImpl = (url) => {
     if (url.endsWith('/health')) return { ok: true, status: 200 };
     throw new Error('post failed');
   };
+  await generate('octocat'); // resolves — generate() catches the rejected POST
   const es = FakeEventSource.instances.at(-1);
-  await generate('second-user'); // resolves — the catch renders instead of throwing
+  assert.equal(es.closed, true);
   assert.match(dom.reportContent.innerHTML, /post failed/);
-  assert.equal(es.closed || false, false, 'the first stream is left open by the failed retry');
+});
+
+test('POST HTTP statuses and bodies are ignored while the stream remains responsible', async () => {
+  for (const status of [201, 400, 503]) {
+    healthyFetch();
+    let statusReads = 0;
+    let bodyReads = 0;
+    fetchImpl = (url) => {
+      if (url.endsWith('/health')) return { ok: true, status: 200 };
+      return {
+        get ok() { statusReads += 1; return status >= 200 && status < 300; },
+        get status() { statusReads += 1; return status; },
+        json() { bodyReads += 1; },
+        text() { bodyReads += 1; },
+      };
+    };
+    await generate('octocat');
+    assert.equal(statusReads, 0, `${status} status/body metadata must not be inspected`);
+    assert.equal(bodyReads, 0, `${status} response body must not be read`);
+    assert.equal(FakeEventSource.instances.at(-1).closed, false);
+    assert.match(dom.reportContent.innerHTML, new RegExp(CONNECTING));
+  }
 });
 
 // ---------------------------------------------------------------------------
